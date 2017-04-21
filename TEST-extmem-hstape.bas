@@ -2,7 +2,7 @@
       MODE 3
       statustemp%=FALSE
       REM Init machine
-      DIM mem%(32767)
+      DIM mem% 65535
       pc%=&FEE:ac%=0:link%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":kbdflag%=FALSE:ttyflag%=TRUE
@@ -12,7 +12,7 @@
       TIME=0
       :
       REM Initial program e.g. RIM loader
-      FOR c%=&FEE TO &FFF:READ d%:mem%(c%)=d%:NEXT
+      FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
       REM (test &80 to &86 : DATA &E80,&285,&E04,&A81,0,1,4095)
       REM HST RIM loader (7756 to 7777, &fee to &fff):
       DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
@@ -25,19 +25,19 @@
       REM addr1%=BGET#file%:addr2%=BGET#file%:byte1%=BGET#file%:byte2%=BGET#file%
       REM address%=((addr1%AND&3F)<<6) + (addr2%AND&3F)
       REM word%=((byte1%AND&3F)<<6) + (byte2%AND&3F)
-      REM mem%(address%)=word%:REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
+      REM PROCdeposit(address%,word%):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
       REM UNTIL EOF#file%:CLOSE#file%:PRINT
       :
       REM ** Main loop **
-      REPEAT
+      REPEAT        
         startpc%=pc%:REM for status
         IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
         IF idefer% THEN idefer%+=1
-        IF(kbdflag% OR ttyflag% )AND (int% AND icontrol%) THEN int%=FALSE:mem%(FALSE)=pc%:intbuffer%=(ifield%<<3)+dfield%:pc%=1
+        IF(kbdflag% OR ttyflag% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,pc%):intbuffer%=(ifield%<<3)+dfield%:pc%=1
         PROCexecute
-        PROCio
-        IF INKEY(-114) THEN PROCcommand
-        IF statustemp%=TRUE THEN PROCstatus(startpc%):PROCpause
+        PROCio      
+        IFINKEY(-114)THENPROCcommand
+        IF statustemp%=TRUE THEN PROCstatus(startpc%): PROCpause
         REM x%=POS:y%=VPOS:PRINTTAB(0,0);:PROCstatus(startpc%):PRINTTAB(x%,y%);
         REM FORN%=0TO10000000:NEXT
       UNTIL FALSE
@@ -48,45 +48,55 @@
         =((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F):REM direct
       ELSE
         temp%=((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F):REM indirect
-        IF temp%>7 AND temp%<16 THEN mem%(temp%)=(mem%(temp%)+1)AND&FFF:REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(mem%(temp%),4)
-        =mem%(temp%)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(mem%(temp%),4)
+        =FNexamine(temp%)
       ENDIF
       :
+      DEFPROCdeposit(address%,word%)
+      mem%?(address%*2)=(word%AND&F00)>>4
+      mem%?(address%*2+1)=word%AND&FF
+      REM PRINT TAB(0,0);FNo0(word%,4);" into addr ";FNo0(address%,4);" ";
+      ENDPROC
+      :
+      DEFFNexamine(address%)
+      =(mem%?(address%*2)<<4)+mem%?(address%*2+1)
+      :
       DEFPROCexecute
-      LOCALcontents%
-      CASE (mem%(pc%)AND &E00) OF
+      LOCAL contents%
+      contents%=FNexamine(pc%)
+      CASE (FNexamine(pc%)AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
-          ac%=ac% AND mem%(FNaddr(mem%(pc%)))
+          ac%=ac% AND FNexamine(FNaddr(contents%))
           pc%=(pc%+1)AND&FFF
         WHEN &200:  REM TAD - add operand to (a 13 bit value)
-          ac%=ac%+mem%(FNaddr(mem%(pc%)))
+          ac%=ac%+FNexamine(FNaddr(contents%))
           IF ac%>4095 THEN
             ac%=ac%-4096
             link%=(NOT link%)AND1
           ENDIF
           pc%=(pc%+1)AND&FFF
         WHEN &400:  REM ISZ - increment operand and skip if result is zero
-          addr%=FNaddr(mem%(pc%))
-          mem%(addr%)=(mem%(addr%)+1)AND&FFF
-          IFmem%(addr%)=FALSE THENpc%=(pc%+1)AND&FFF
+          addr%=FNaddr(contents%)
+          PROCdeposit(addr%,(FNexamine(addr%)+1)AND&FFF)
+          IFFNexamine(addr%)=FALSE THENpc%=(pc%+1)AND&FFF
           pc%=(pc%+1)AND&FFF
         WHEN &600:  REM DCA - deposit AC in memory and clear AC
-          mem%(FNaddr(mem%(pc%)))=ac%
+          PROCdeposit(FNaddr(contents%),ac%)
           ac%=0
           pc%=(pc%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           ifield%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          mem%(FNaddr(mem%(pc%)))=pc%+1
-          pc%=(FNaddr(mem%(pc%)))+1
+          PROCdeposit(FNaddr(contents%) ,pc%+1)
+          pc%=(FNaddr(contents%))+1
         WHEN &A00:  REM JMP - jump
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           ifield%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          pc%=FNaddr(mem%(pc%))
+          pc%=FNaddr(contents%)
         WHEN &C00:  REM IOT - input/output transfer
-          CASE (mem%(pc%) AND &1F8) OF
+          CASE (contents% AND &1F8) OF
             WHEN 0:  REM Program Interrupt and flag (internal IOT)
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 0:  REM SKON
                   IF int%=TRUE THEN pc%=(pc%+1)AND&FFF
                 WHEN 1: REM ION
@@ -100,7 +110,7 @@
               ENDCASE
             WHEN 8: REM HS tape input
               PROCtape
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 1: REM RSF; Reader skip if flag
                   IF hstflag%=TRUE THEN pc%+=1
                 WHEN 2: REM RRB; Read Reader Buffer
@@ -112,14 +122,14 @@
                   hstflag%=FALSE
               ENDCASE
             WHEN 9: REM HS punch output
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 1: REM PSF; Punch skip if flag
                 WHEN 2: REM PCF; Punch Clear Flag
                 WHEN 4: REM PPC; Punch Put Character
                 WHEN 6: REM PLS; Punch Load Sequence
               ENDCASE
             WHEN 24: REM Teletype keyboard/reader
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 1: REM KSF:
                   IFkbdflag%THENpc%=(pc%+1)AND&FFF
                 WHEN 2: REM KCC
@@ -130,7 +140,7 @@
                   ac%=ASC(LEFT$(kbdbuf$,1)):kbdflag%=FALSE:kbdbuf$="":REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and put in ac, clear flag
               ENDCASE
             WHEN 32:REM Teletype teleprinter/punch
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 1:  REM TSF:
                   IFttyflag%THENpc%=(pc%+1)AND&FFF
                 WHEN 2: REM TCF
@@ -143,12 +153,12 @@
                   REM PRINT "[TLS ";ac%;"]";:REM PROCpause:REM **************
               ENDCASE
             WHEN 128,136,144,152,160,168,176,184:REM 62XX - Memory management
-              CASE (mem%(pc%) AND 7) OF
+              CASE (contents% AND 7) OF
                 WHEN 1: REM 62X1 CDF; Change Data Field
-                  dfield%=(mem%(pc%) AND &38)>>3
+                  dfield%=(contents% AND &38)>>3
                   REM PRINT "[CDF "; (contents% AND &38)>>3;"]";
                 WHEN 2: REM 62X2 CIF; Change Instruction Field
-                  insbuffer%=(mem%(pc%) AND &38)>>3:REM Buffered until next JMP or JMS instruction
+                  insbuffer%=(contents% AND &38)>>3:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CIF "; (contents% AND &38)>>3;"]" ;
                 WHEN 3: REM 62X3 CDI; Change Data and Instruction Fields
@@ -157,7 +167,7 @@
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CDI "; (contents% AND &38)>>3;"]";
                 WHEN 4: REM Other instructions
-                  CASE (mem%(pc%) AND &38) OF
+                  CASE (contents% AND &38) OF
                     WHEN 8: REM 6214 RDF;  Read Data Field
                       ac%=ac% OR (dfield%<<3)
                     WHEN 16: REM 6224 RIF; Read Instruction Field
@@ -228,33 +238,33 @@
       ENDPROC
       :
       DEFPROCstatus(pc%)
-      CASE (mem%(pc%)AND &E00) OF
+      CASE (FNexamine(pc%)AND &E00) OF
       WHEN 0:
-        dis$="AND ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="AND ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &200:
-        dis$="TAD ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="TAD ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &400:
-        dis$="ISZ ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="ISZ ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &600:
-        dis$="DCA ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="DCA ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &800:
-        dis$="JMS ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="JMS ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &A00:
-        dis$="JMP ":IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F),4)
-        IF (mem%(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(mem%(((mem%(pc%) AND &80) >>7)*(pc% AND &F80) + (mem%(pc%) AND &7F)),4)+")"
+        dis$="JMP ":IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+"I "
+        dis$=dis$+FNo0(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F),4)
+        IF (FNexamine(pc%)AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((FNexamine(pc%) AND &80) >>7)*(pc% AND &F80) + (FNexamine(pc%) AND &7F)),4)+")"
       WHEN &C00:
-        CASE (mem%(pc%)AND &1FF) OF
+        CASE (FNexamine(pc%)AND &1FF) OF
           WHEN 0: dis$="SKON":REM Program Interrupt and flag (internal IOT)
           WHEN 1: dis$="ION"
           WHEN 2: dis$="IOF"
@@ -281,8 +291,8 @@
           WHEN 34: dis$="TCF"
           WHEN 36: dis$="TPC"
           WHEN 38: dis$="TLS ["+FNo0(ASC(LEFT$(ttybuf$,1)),3)+"]"
-          WHEN 129,137,145,153,161,169,177,185: dis$="CDF "+STR$((mem%(pc%) AND &38) >>3) :REM Memory management
-          WHEN 130,138,146,154,162,170,178,186: dis$="CIF "+STR$((mem%(pc%) AND &38) >>3)
+          WHEN 129,137,145,153,161,169,177,185: dis$="CDF "+((FNexamine(pc%) AND &38) >>3) :REM Memory management
+          WHEN 130,138,146,154,162,170,178,186: dis$="CIF "+((FNexamine(pc%) AND &38) >>3)
           WHEN 140: dis$="RDF"
           WHEN 148: dis$="RIF"
           WHEN 156: dis$="RIB"
@@ -293,40 +303,40 @@
           WHEN 505: dis$="DTSF"
           WHEN 508: dis$="DTRB"
           WHEN 508: dis$="DTLB"
-          OTHERWISE:dis$="IOT "+FNo0(mem%(pc%)AND&1FF,3)
+          OTHERWISE:dis$="IOT "+FNo0(FNexamine(pc%)AND&1FF,3)
         ENDCASE
       WHEN &E00:
         dis$="OPR ("
-        CASE (mem%(pc%)AND &F00) OF
+        CASE (FNexamine(pc%)AND &F00) OF
           WHEN &E00:REM Group 1 (%1110xxxxxxxx)
-            IF (mem%(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
-            IF (mem%(pc%)AND&40)=&40 THEN dis$=dis$+" CLL"
-            IF (mem%(pc%)AND&20)=&20 THEN dis$=dis$+" CMA"
-            IF (mem%(pc%)AND&10)=&10 THEN dis$=dis$+" CML"
-            IF (mem%(pc%)AND1)  =  1 THEN dis$=dis$+" IAC"
-            IF (mem%(pc%)AND4)  =  4 THEN dis$=dis$+" RAL"
-            IF (mem%(pc%)AND8)  =  8 THEN dis$=dis$+" RAR"
-            IF (mem%(pc%)AND6)  =  6 THEN dis$=dis$+" RTL"
-            IF (mem%(pc%)AND&A) = &A THEN dis$=dis$+" RTR"
-            IF (mem%(pc%)AND2)  =  2 THEN : REM BSW (8e and up)
+            IF (FNexamine(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
+            IF (FNexamine(pc%)AND&40)=&40 THEN dis$=dis$+" CLL"
+            IF (FNexamine(pc%)AND&20)=&20 THEN dis$=dis$+" CMA"
+            IF (FNexamine(pc%)AND&10)=&10 THEN dis$=dis$+" CML"
+            IF (FNexamine(pc%)AND1)  =  1 THEN dis$=dis$+" IAC"
+            IF (FNexamine(pc%)AND4)  =  4 THEN dis$=dis$+" RAL"
+            IF (FNexamine(pc%)AND8)  =  8 THEN dis$=dis$+" RAR"
+            IF (FNexamine(pc%)AND6)  =  6 THEN dis$=dis$+" RTL"
+            IF (FNexamine(pc%)AND&A) = &A THEN dis$=dis$+" RTR"
+            IF (FNexamine(pc%)AND2)  =  2 THEN : REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), AND/OR group
-            IF (mem%(pc%)AND8)=8 THEN
-              IF (mem%(pc%)AND&40)=&40 THEN dis$=dis$+" SPA"
-              IF (mem%(pc%)AND&20)=&20 THEN dis$=dis$+" SNA"
-              IF (mem%(pc%)AND&10)=&10 THEN dis$=dis$+" SZL"
-              IF (mem%(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
-              IF (mem%(pc%)AND2)  =  2 THEN dis$=dis$+" HLT"
-              IF (mem%(pc%)AND4)  =  4 THEN dis$=dis$+" OSR"
+            IF (FNexamine(pc%)AND8)=8 THEN
+              IF (FNexamine(pc%)AND&40)=&40 THEN dis$=dis$+" SPA"
+              IF (FNexamine(pc%)AND&20)=&20 THEN dis$=dis$+" SNA"
+              IF (FNexamine(pc%)AND&10)=&10 THEN dis$=dis$+" SZL"
+              IF (FNexamine(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
+              IF (FNexamine(pc%)AND2)  =  2 THEN dis$=dis$+" HLT"
+              IF (FNexamine(pc%)AND4)  =  4 THEN dis$=dis$+" OSR"
             ELSE
-              IF (mem%(pc%)AND&40)=&40 THEN dis$=dis$+" SMA"
-              IF (mem%(pc%)AND&20)=&20 THEN dis$=dis$+" SZA"
-              IF (mem%(pc%)AND&10)=&10 THEN dis$=dis$+" SNL"
-              IF (mem%(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
+              IF (FNexamine(pc%)AND&40)=&40 THEN dis$=dis$+" SMA"
+              IF (FNexamine(pc%)AND&20)=&20 THEN dis$=dis$+" SZA"
+              IF (FNexamine(pc%)AND&10)=&10 THEN dis$=dis$+" SNL"
+              IF (FNexamine(pc%)AND&80)=&80 THEN dis$=dis$+" CLA"
             ENDIF
         ENDCASE
         dis$=dis$+")"
       ENDCASE
-      PRINT "IF:";ifield%;" DF:";dfield%;" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(mem%(pc%),4);" (";dis$;")          "
+      PRINT "IF:";ifield%;" DF:";dfield%;" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(FNexamine(pc%),4);" (";dis$;")          "
       REM PRINT "Contents of 7767,7777: ";FNo0(mem%(&FFE),4); " ";FNo0(mem%(&FFF),4); "   "
       ENDPROC
       :
