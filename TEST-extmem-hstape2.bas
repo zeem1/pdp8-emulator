@@ -1,4 +1,4 @@
-      INSTALL @dir$+"/examples/extra/Number.bbc"
+      INSTALL @dir$+"/Number.bbc"
       MODE 3
       statustemp%=FALSE
       REM Init machine
