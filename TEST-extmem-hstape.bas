@@ -1,6 +1,6 @@
       INSTALL @dir$+"/Number.bbc"
       MODE 3
-      statustemp%=TRUE
+      statustemp%=FALSE
       REM Init machine
       DIM mem% 65535
       pc%=&FEE:ac%=0:link%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
@@ -37,7 +37,7 @@
         PROCexecute
         PROCio
         IFINKEY(-114)THENPROCcommand
-        IF statustemp%=TRUE THEN PROCstatus(startpc%): REM PROCpause
+        IF statustemp%=TRUE THEN PROCstatus(startpc%): PROCpause
         REM x%=POS:y%=VPOS:PRINTTAB(0,0);:PROCstatus(startpc%):PRINTTAB(x%,y%);
         REM FORN%=0TO10000000:NEXT
       UNTIL FALSE
@@ -47,7 +47,7 @@
       IF (eff_mem%AND&100) = 0 THEN
         =(ifield%<<12)+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM direct
       ELSE
-        temp%=(ifield%<<12)+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):PRINT"indirect"
+        temp%=(ifield%<<12)+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM PRINT"indirect"
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(mem%(temp%),4)
         =(dfield%<<12)+FNexamine(temp%)
       ENDIF
@@ -55,11 +55,11 @@
       DEFPROCdeposit(address%,word%)
       mem%?(address%*2)=(word%AND&F00)>>4
       mem%?(address%*2+1)=word%AND&FF
-      PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
+      IF statustemp% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
-      PRINT "Examining address ";FNo0(address%,5)
+      IF statustemp% THEN PRINT "Examining address ";FNo0(address%,5)
       =(mem%?(address%*2)<<4)+mem%?(address%*2+1)
       :
       DEFPROCexecute
@@ -360,9 +360,17 @@
         WHEN "P":
           INPUT"PC";p%:pc%=FNo2d(p%)
         WHEN "T":
-          CLOSE#file%:file%=OPENIN(@dir$+"/dec-08-ajae-pb.bin"):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED FOCAL BIN TAPE"
+          PROCchangetape
       ENDCASE
       UNTILc$="C"
       ENDPROC
       :
       DEFFNo2d(o%):LOCALo$:o$=RIGHT$("0000"+STR$o%,4):=VAL(LEFT$(o$,1))*512+VAL(MID$(o$,2,1))*64+VAL(MID$(o$,3,1))*8+VAL(RIGHT$(o$,1))
+      :
+      DEFPROCchangetape
+      LOCALF$
+      CLOSE#file%
+      OSCLI"DIR "+@dir$:OSCLI". *.BIN"
+      INPUT"TAPE FILE NAME",F$
+      file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED "+F$+" TAPE"
+      ENDPROC
