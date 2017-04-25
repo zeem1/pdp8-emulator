@@ -1,9 +1,10 @@
       INSTALL @dir$+"/Number.bbc"
       MODE 3
       statustemp%=FALSE
+      :
       REM Init machine
       DIM mem% 65535
-      pc%=&FEE:ac%=0:link%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+      :ac%=0:link%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":kbdflag%=FALSE:ttyflag%=TRUE
 
@@ -12,32 +13,48 @@
       TIME=0
       :
       REM Initial program e.g. RIM loader
-      FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT:REM ***** BODGE TEST TO MEMORY FIELD 1 GOES HERE*****
+      REM FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT:REM ***** BODGE TEST TO MEMORY FIELD 1 GOES HERE*****
       REM (test &80 to &86 : DATA &E80,&285,&E04,&A81,0,1,4095)
       REM HST RIM loader (7756 to 7777, &fee to &fff):
-      DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
+      REM DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
       REM ** read in a RIM file **
       REM file%=OPENIN(@dir$+"/focal.rim")
-      file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
-      hstflag%=TRUE:hstbuffer%=0
-
-      REM REPEAT
-      REM addr1%=BGET#file%:addr2%=BGET#file%:byte1%=BGET#file%:byte2%=BGET#file%
-      REM address%=((addr1%AND&3F)<<6) + (addr2%AND&3F)
-      REM word%=((byte1%AND&3F)<<6) + (byte2%AND&3F)
-      REM PROCdeposit(address%,word%):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
-      REM UNTIL EOF#file%:CLOSE#file%:PRINT
+      REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
+      hstflag%=FALSE:hstbuffer%=0
       :
+      INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "C":
+          OSCLI"DIR "+@dir$:OSCLI". *.CORE"
+          INPUT"IMAGE FILE NAME",F$
+          file%=OPENIN(@dir$+"/"+F$)
+          address%=0
+          REPEAT
+            byte1%=BGET#file%:byte2%=BGET#file%
+            PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
+            address%+=1
+          UNTIL EOF#file%:REM CLOSE#file%:PRINT
+          PRINT"LOADED "+F$+" IMAGE"
+          PROCcommand:REM need to get start PC from user
+        WHEN "R":
+          file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
+          FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
+          DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
+          pc%=&FEE:REM Start the RIM loader, load the BIN loader
+      ENDCASE
+
+
+
       REM ** Main loop **
       REPEAT
         startpc%=pc%:REM for status
         IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
         IF idefer% THEN idefer%+=1
-        IF(kbdflag% OR ttyflag% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,pc%):intbuffer%=(ifield%<<3)+dfield%:pc%=1
+        IF(kbdflag% OR ttyflag% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,pc%):intbuffer%=(ifield%>>9)+(dfield%>>12):pc%=1
         PROCexecute
-        PROCio
+        PROCkbd
         IFINKEY(-114)THENPROCcommand
-        IF statustemp%=TRUE THEN PROCstatus(startpc%): PROCpause
+        IF statustemp%=TRUE THEN PROCstatus(startpc%): REM PROCpause
         REM x%=POS:y%=VPOS:PRINTTAB(0,0);:PROCstatus(startpc%):PRINTTAB(x%,y%);
         REM FORN%=0TO10000000:NEXT
       UNTIL FALSE
@@ -45,26 +62,26 @@
       DEFFNaddr(eff_mem%)
       LOCAL temp%
       IF (eff_mem%AND&100) = 0 THEN
-        =(ifield%<<12)+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM direct
+        =ifield%+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM direct
       ELSE
-        temp%=(ifield%<<12)+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM PRINT"indirect"
+        temp%=ifield%+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):IF statustemp% THEN PRINT" indirect ";
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(mem%(temp%),4)
-        =(dfield%<<12)+FNexamine(temp%)
+        =dfield%+FNexamine(temp%)
       ENDIF
       :
       DEFPROCdeposit(address%,word%)
-      mem%?(address%*2)=(word%AND&F00)>>4
-      mem%?(address%*2+1)=word%AND&FF
+      mem%?(address%+32768)=(word%AND&F00)>>4:mem%?address%=word%AND&FF
       IF statustemp% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
       IF statustemp% THEN PRINT "Examining address ";FNo0(address%,5)
-      =(mem%?(address%*2)<<4)+mem%?(address%*2+1)
+      =(mem%?(address%+32768)<<4)+mem%?address%
       :
       DEFPROCexecute
-      LOCAL contents%
-      contents%=FNexamine((ifield%<<12)+pc%)
+      REM LOCAL contents%
+      LOCAL addr%
+      contents%=FNexamine(ifield%+pc%)
       CASE (contents% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
           ac%=ac% AND FNexamine(FNaddr(contents%))
@@ -153,31 +170,35 @@
                   ttyflag%=FALSE:ttybuf$=ttybuf$+CHR$(ac% AND &7F)
                   REM PRINT "[TLS ";ac%;"]";:REM PROCpause:REM **************
               ENDCASE
+              PROCtprinter
             WHEN 128,136,144,152,160,168,176,184:REM 62XX - Memory management
               CASE (contents% AND 7) OF
                 WHEN 1: REM 62X1 CDF; Change Data Field
-                  dfield%=(contents% AND &38)>>3
+                  REM dfield%=(contents% AND &38)>>3
+                  dfield%=(contents% AND &38)<<9
                   REM PRINT "[CDF "; (contents% AND &38)>>3;"]";
                 WHEN 2: REM 62X2 CIF; Change Instruction Field
-                  insbuffer%=(contents% AND &38)>>3:REM Buffered until next JMP or JMS instruction
+                  REM insbuffer%=(contents% AND &38)>>3:REM Buffered until next JMP or JMS instruction
+                  insbuffer%=(contents% AND &38)<<9:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CIF "; (contents% AND &38)>>3;"]" ;
                 WHEN 3: REM 62X3 CDI; Change Data and Instruction Fields
-                  dfield%=(mem%(pc%) AND &38)>>3
+                  REM dfield%=(mem%(pc%) AND &38)>>3
+                  dfield%=(mem%(pc%) AND &38)>>9
                   insbuffer%=dfield%:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CDI "; (contents% AND &38)>>3;"]";
                 WHEN 4: REM Other instructions
                   CASE (contents% AND &38) OF
                     WHEN 8: REM 6214 RDF;  Read Data Field
-                      ac%=ac% OR (dfield%<<3)
+                      ac%=ac% OR (dfield%>>9):REM was <<3
                     WHEN 16: REM 6224 RIF; Read Instruction Field
-                      ac%=ac% OR (ifield%<<3)
+                      ac%=ac% OR (ifield%>>9):REM was <<3
                     WHEN 24: REM 6234 RIB; Read Interrupt Buffer
                       ac%=ac% OR (intbuffer% AND &3F)
                     WHEN 32: REM 6244 RMF; Restore Memory Field
-                      dfield%=intbuffer% AND 7
-                      insbuffer%=(intbuffer% AND &38)>>3
+                      dfield%=(intbuffer% AND 7)<<12
+                      insbuffer%=(intbuffer% AND &38)<<9
                   ENDCASE
               ENDCASE
 
@@ -185,7 +206,6 @@
         ENDIF
         pc%=(pc%+1)AND&FFF
       WHEN &E00:  REM OPR - microcoded operations
-        contents%=FNexamine((ifield%<<12)+pc%)
         CASE (contents% AND &F00) OF
           WHEN &E00:REM Group 1 (%1110xxxxxxxx)
             IF (contents%AND&80)=&80 THEN ac%=0:REM CLA
@@ -216,13 +236,15 @@
       ENDCASE
       ENDPROC
       :
-      DEFPROCio
-      LOCAL kbdtemp$,ttemp$
+      DEFPROCkbd
+      LOCAL kbdtemp$
       REM Keyboard
       kbdtemp$=INKEY$(0)
       IFkbdtemp$<>""THENkbdbuf$=kbdtemp$
       kbdflag%=FALSE:IFLENkbdbuf$>0THENkbdflag%=TRUE
-      REM Printer
+
+      DEFPROCtprinter
+      LOCAL ttemp$
       IFLENttybuf$>0THEN
       ttemp$=LEFT$(ttybuf$,1):IFASC(ttemp$)<127THENVDUASC(ttemp$)
       ttybuf$=RIGHT$(ttybuf$,LENttybuf$-1)
@@ -239,7 +261,7 @@
       ENDPROC
       :
       DEFPROCstatus(pc%)
-      LOCAL contents%
+      REM LOCAL contents%
       contents%=FNexamine((ifield%<<12)+pc%)
       CASE (contents% AND &E00) OF
       WHEN 0:
@@ -339,7 +361,7 @@
         ENDCASE
         dis$=dis$+")"
       ENDCASE
-      PRINT "IF:";ifield%;" DF:";dfield%;" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(contents%,4);" (";dis$;")          "
+      PRINT "IF:";FNo0(ifield%,5);" DF:";FNo0(dfield%,5);" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(contents%,4);" (";dis$;")          "
       REM PRINT "Contents of 7767,7777: ";FNo0(mem%(&FFE),4); " ";FNo0(mem%(&FFF),4); "   "
       ENDPROC
       :
@@ -351,16 +373,18 @@
       LOCALc$,p%:PROCstatus(pc%):REM statustemp%=TRUE:REM *********** TEST *****************
       PRINT "Stopped. ";
       REPEAT
-      OSCLI"FX15,1":INPUT"COMMAND E(xamine)/C(ont)/P(C)/T(ape)/S(ingle-step toggle)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(C)ont/(P)C/(T)ape/(S)ingle-step toggle)/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
           statustemp%=NOT statustemp%
         WHEN "E":
-          INPUT"EXAMINE ADDRESS";p%:PRINTmem%(FNo2d(p%))
+          INPUT"EXAMINE ADDRESS";p%:PRINTmem%?FNo2d(p%)
         WHEN "P":
           INPUT"PC";p%:pc%=FNo2d(p%)
         WHEN "T":
           PROCchangetape
+        WHEN "I":
+          PROCsavecore
       ENDCASE
       UNTILc$="C"
       ENDPROC
@@ -374,3 +398,19 @@
       INPUT"TAPE FILE NAME",F$
       file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED "+F$+" TAPE"
       ENDPROC
+
+      DEFPROCsavecore
+      LOCAL F$,count%,n%,l%,file%
+      OSCLI"DIR "+@dir$:OSCLI". *.CORE"
+      INPUT"IMAGE FILE NAME TO SAVE",F$
+      INPUT"NUMBER OF WORDS",count%
+      file%=OPENOUT(@dir$+"/"+F$)
+      FORn%=0TOcount%-1
+      word%=((mem%?(n%+32768))<<4)+mem%?n%
+      byte1%=((word%AND&FC0)>>6)+33:byte2%=(word%AND&3F)+33
+      BPUT#file%,byte1%:BPUT#file%,byte2%
+      IF count%DIV64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
+      NEXT:CLOSE#file%
+      PRINT"SAVED "+F$+" IMAGE"
+      ENDPROC
+
