@@ -3,7 +3,7 @@
       singlestep%=FALSE
       :
       REM Init machine
-      DIM mem% 65535
+      DIM mem% 131071
       :ac%=0:link%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":kbdflag%=FALSE:ttyflag%=TRUE
@@ -70,13 +70,14 @@
       ENDIF
       :
       DEFPROCdeposit(address%,word%)
-      mem%?(address%+32768)=(word%AND&F00)>>4:mem%?address%=word%AND&FF
+      mem%!(address%<<2)=word%
       IF singlestep% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
       IF singlestep% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0((mem%?(address%+32768)<<4)+mem%?address%,4)
-      =(mem%?(address%+32768)<<4)+mem%?address%
+      =mem%!(address%<<2)
+
       :
       DEFPROCexecute
       REM LOCAL contents%
