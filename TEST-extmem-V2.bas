@@ -10,7 +10,6 @@
 
       REM Memory control
       ifield%=0:dfield%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
-      TIME=0
       :
       REM Initial program e.g. RIM loader
       REM FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT:REM ***** BODGE TEST TO MEMORY FIELD 1 GOES HERE*****
@@ -43,8 +42,6 @@
           pc%=&FEE:REM Start the RIM loader, load the BIN loader
       ENDCASE
 
-
-
       REM ** Main loop **
       REPEAT
         startpc%=pc%:REM for status
@@ -75,7 +72,7 @@
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF singlestep% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0((mem%?(address%+32768)<<4)+mem%?address%,4)
+      IF singlestep% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(mem%!(address%<<2))
       =mem%!(address%<<2)
 
       :
