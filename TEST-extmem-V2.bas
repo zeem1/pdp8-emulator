@@ -1,6 +1,6 @@
       INSTALL @dir$+"/Number.bbc"
       MODE 3
-      statustemp%=FALSE
+      singlestep%=FALSE
       :
       REM Init machine
       DIM mem% 65535
@@ -54,7 +54,7 @@
         PROCexecute
         PROCkbd
         IFINKEY(-114)THENPROCcommand
-        IF statustemp%=TRUE THEN PROCstatus(startpc%): REM PROCpause
+        IF singlestep%=TRUE THEN PROCstatus(startpc%): PROCpause
         REM x%=POS:y%=VPOS:PRINTTAB(0,0);:PROCstatus(startpc%):PRINTTAB(x%,y%);
         REM FORN%=0TO10000000:NEXT
       UNTIL FALSE
@@ -64,23 +64,23 @@
       IF (eff_mem%AND&100) = 0 THEN
         =ifield%+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):REM direct
       ELSE
-        temp%=ifield%+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):IF statustemp% THEN PRINT" indirect ";
+        temp%=dfield%+(((eff_mem% AND &80) >>7)*(pc% AND &F80) + (eff_mem% AND &7F)):IF singlestep% THEN PRINT" indirect ";
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(mem%(temp%),4)
         =dfield%+FNexamine(temp%)
       ENDIF
       :
       DEFPROCdeposit(address%,word%)
       mem%?(address%+32768)=(word%AND&F00)>>4:mem%?address%=word%AND&FF
-      IF statustemp% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
+      IF singlestep% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF statustemp% THEN PRINT "Examining address ";FNo0(address%,5)
+      IF singlestep% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0((mem%?(address%+32768)<<4)+mem%?address%,4)
       =(mem%?(address%+32768)<<4)+mem%?address%
       :
       DEFPROCexecute
       REM LOCAL contents%
-      LOCAL addr%
+      LOCAL addr%,temp%
       contents%=FNexamine(ifield%+pc%)
       CASE (contents% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
@@ -97,6 +97,8 @@
           addr%=FNaddr(contents%)
           PROCdeposit(addr%,(FNexamine(addr%)+1)AND&FFF)
           IFFNexamine(addr%)=FALSE THENpc%=(pc%+1)AND&FFF
+          REM temp%=(FNexamine(FNaddr(contents%))+1)AND&FFF:PROCdeposit(FNaddr(contents%),temp%)
+          REM IF NOT temp% THENpc%=(pc%+1)AND&FFF
           pc%=(pc%+1)AND&FFF
         WHEN &600:  REM DCA - deposit AC in memory and clear AC
           PROCdeposit(FNaddr(contents%),ac%)
@@ -240,9 +242,12 @@
       LOCAL kbdtemp$
       REM Keyboard
       kbdtemp$=INKEY$(0)
-      IFkbdtemp$<>""THENkbdbuf$=kbdtemp$
+      IFkbdtemp$<>""THEN
+      IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND223)
+      kbdbuf$=kbdtemp$
+      ENDIF
       kbdflag%=FALSE:IFLENkbdbuf$>0THENkbdflag%=TRUE
-
+      :
       DEFPROCtprinter
       LOCAL ttemp$
       IFLENttybuf$>0THEN
@@ -261,33 +266,31 @@
       ENDPROC
       :
       DEFPROCstatus(pc%)
-      REM LOCAL contents%
-      contents%=FNexamine((ifield%<<12)+pc%)
+      LOCAL singletemp%,contents%,contentsd%,dis$
+      singletemp%=singlestep%:singlestep%=FALSE:REM suppress diagnostic messages during status output
+      contents%=FNexamine(ifield%+pc%)
       CASE (contents% AND &E00) OF
-      WHEN 0:
-        dis$="AND ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
-      WHEN &200:
-        dis$="TAD ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
-      WHEN &400:
-        dis$="ISZ ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
-      WHEN &600:
-        dis$="DCA ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
-      WHEN &800:
-        dis$="JMS ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
-      WHEN &A00:
-        dis$="JMP ":IF (contents%AND &100)=&100 THEN dis$=dis$+"I "
-        dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
-        IF (contents%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(FNexamine(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F)),4)+")"
+      WHEN 0,&200,&400,&600,&800,&A00:
+        CASE (contents% AND &E00) OF
+          WHEN 0:
+            dis$="AND "
+          WHEN &200:
+            dis$="TAD "
+          WHEN &400:
+            dis$="ISZ "
+          WHEN &600:
+            dis$="DCA "
+          WHEN &800:
+            dis$="JMS "
+          WHEN &A00:
+            dis$="JMP "
+        ENDCASE
+        IF (contents%AND &100)=&100 THEN
+          contentsd%=FNexamine(dfield%+pc%)
+          dis$=dis$+"I "+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)+" ("+FNo0(FNexamine(((contentsd% AND &80) >>7)*(pc% AND &F80) + (contentsd% AND &7F)),4) + ")"
+        ELSE
+          dis$=dis$+FNo0(((contents% AND &80) >>7)*(pc% AND &F80) + (contents% AND &7F),4)
+        ENDIF
       WHEN &C00:
         CASE (contents%AND &1FF) OF
           WHEN 0: dis$="SKON":REM Program Interrupt and flag (internal IOT)
@@ -331,38 +334,37 @@
           OTHERWISE:dis$="IOT "+FNo0(contents%AND&1FF,3)
         ENDCASE
       WHEN &E00:
-        dis$="OPR ("
         CASE (contents%AND &F00) OF
           WHEN &E00:REM Group 1 (%1110xxxxxxxx)
-            IF (contents%AND&80)=&80 THEN dis$=dis$+" CLA"
-            IF (contents%AND&40)=&40 THEN dis$=dis$+" CLL"
-            IF (contents%AND&20)=&20 THEN dis$=dis$+" CMA"
-            IF (contents%AND&10)=&10 THEN dis$=dis$+" CML"
-            IF (contents%AND1)  =  1 THEN dis$=dis$+" IAC"
-            IF (contents%AND4)  =  4 THEN dis$=dis$+" RAL"
-            IF (contents%AND8)  =  8 THEN dis$=dis$+" RAR"
-            IF (contents%AND6)  =  6 THEN dis$=dis$+" RTL"
-            IF (contents%AND&A) = &A THEN dis$=dis$+" RTR"
+            IF (contents%AND&80)=&80 THEN dis$=dis$+"CLA "
+            IF (contents%AND&40)=&40 THEN dis$=dis$+"CLL "
+            IF (contents%AND&20)=&20 THEN dis$=dis$+"CMA "
+            IF (contents%AND&10)=&10 THEN dis$=dis$+"CML "
+            IF (contents%AND1)  =  1 THEN dis$=dis$+"IAC "
+            IF (contents%AND4)  =  4 THEN dis$=dis$+"RAL "
+            IF (contents%AND8)  =  8 THEN dis$=dis$+"RAR "
+            IF (contents%AND6)  =  6 THEN dis$=LEFT$(dis$,LEN(dis$)-4):dis$=dis$+"RTL "
+            IF (contents%AND&A) = &A THEN dis$=LEFT$(dis$,LEN(dis$)-4):dis$=dis$+"RTR "
             IF (contents%AND2)  =  2 THEN : REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), AND/OR group
             IF (contents%AND8)=8 THEN
-              IF (contents%AND&40)=&40 THEN dis$=dis$+" SPA"
-              IF (contents%AND&20)=&20 THEN dis$=dis$+" SNA"
-              IF (contents%AND&10)=&10 THEN dis$=dis$+" SZL"
-              IF (contents%AND&80)=&80 THEN dis$=dis$+" CLA"
-              IF (contents%AND2)  =  2 THEN dis$=dis$+" HLT"
-              IF (contents%AND4)  =  4 THEN dis$=dis$+" OSR"
+              IF (contents%AND&40)=&40 THEN dis$=dis$+"SPA "
+              IF (contents%AND&20)=&20 THEN dis$=dis$+"SNA "
+              IF (contents%AND&10)=&10 THEN dis$=dis$+"SZL "
+              IF (contents%AND&80)=&80 THEN dis$=dis$+"CLA "
+              IF (contents%AND2)  =  2 THEN dis$=dis$+"HLT "
+              IF (contents%AND4)  =  4 THEN dis$=dis$+"OSR "
             ELSE
-              IF (contents%AND&40)=&40 THEN dis$=dis$+" SMA"
-              IF (contents%AND&20)=&20 THEN dis$=dis$+" SZA"
-              IF (contents%AND&10)=&10 THEN dis$=dis$+" SNL"
-              IF (contents%AND&80)=&80 THEN dis$=dis$+" CLA"
+              IF (contents%AND&40)=&40 THEN dis$=dis$+"SMA "
+              IF (contents%AND&20)=&20 THEN dis$=dis$+"SZA "
+              IF (contents%AND&10)=&10 THEN dis$=dis$+"SNL "
+              IF (contents%AND&80)=&80 THEN dis$=dis$+"CLA "
             ENDIF
         ENDCASE
-        dis$=dis$+")"
       ENDCASE
-      PRINT "IF:";FNo0(ifield%,5);" DF:";FNo0(dfield%,5);" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(contents%,4);" (";dis$;")          "
+      PRINT "IF:";ifield%>>12;" DF:";dfield%>>12;" PC:";FNo0(pc%,4);" LINK:";link% ;" AC:";FNo0(ac%,4);" INT:";int%;" INSTR:";FNo0(contents%,4);" (";dis$;")          "
       REM PRINT "Contents of 7767,7777: ";FNo0(mem%(&FFE),4); " ";FNo0(mem%(&FFF),4); "   "
+      singlestep%=singletemp%:REM re-enable diagnostic messages
       ENDPROC
       :
       DEFPROCpause
@@ -370,17 +372,19 @@
       ENDPROC
       :
       DEFPROCcommand
-      LOCALc$,p%:PROCstatus(pc%):REM statustemp%=TRUE:REM *********** TEST *****************
+      LOCALc$,p%:PROCstatus(pc%):REM singlestep%=TRUE:REM *********** TEST *****************
       PRINT "Stopped. ";
       REPEAT
-      OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(C)ont/(P)C/(T)ape/(S)ingle-step toggle)/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step toggle/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
-          statustemp%=NOT statustemp%
+          singlestep%=NOT singlestep%
         WHEN "E":
           INPUT"EXAMINE ADDRESS";p%:PRINTmem%?FNo2d(p%)
         WHEN "P":
           INPUT"PC";p%:pc%=FNo2d(p%)
+        WHEN "D":
+          PROCmanual_deposit
         WHEN "T":
           PROCchangetape
         WHEN "I":
@@ -412,5 +416,26 @@
       IF count%DIV64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
       NEXT:CLOSE#file%
       PRINT"SAVED "+F$+" IMAGE"
+      ENDPROC
+
+      DEFPROCmanual_deposit
+      LOCALc$,c%
+      INPUT "(A)C, (M)EMORY, (S)WITCH REG, (D)ATA FIELD, (I)NSTR FIELD",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+      WHEN "A":
+      WHEN "M":
+      WHEN "S":
+      WHEN "D":
+        REPEAT
+          PRINT "Current data field is ";dfield%>>12:INPUT "Enter New Field (0-7):"c%
+        UNTIL c%>=0 AND c%<=7
+        dfield%=c%<<12
+      WHEN "I":
+        REPEAT
+          PRINT "Current instruction field is ";ifield%>>12:INPUT "Enter New Field (0-7):"c%
+        UNTIL c%>=0 AND c%<=7
+        ifield%=c%<<12
+
+      ENDCASE
       ENDPROC
 
