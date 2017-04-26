@@ -75,7 +75,7 @@
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF S% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2))
+      IF S% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
 
       :
