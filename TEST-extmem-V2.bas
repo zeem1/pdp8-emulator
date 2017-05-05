@@ -13,7 +13,7 @@
       REM Init machine
 
       DIM M% 131071
-      A%=0:L%=0::sr%=2047:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+      A%=0:L%=0::sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
 
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE
@@ -55,7 +55,7 @@
 
       REM ** Main loop **
       REPEAT
-        startP%=P%:REM for status
+        startpc%=P%:REM for status
         IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
         IF idefer% THEN idefer%+=1
         IF(K% OR T% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):P%=1
@@ -63,9 +63,8 @@
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
 
-        IF S%=TRUE THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);:
-        REM PROCpause
-     
+        IF S%=TRUE THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);:REM PROCpause
+
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
@@ -74,7 +73,7 @@
         =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
       ELSE
 
-    temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM IF S% THEN PRINT" indirect ";
+        temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM IF S% THEN PRINT" indirect ";
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
         =D%+FNexamine(temp%)
       ENDIF
@@ -85,7 +84,7 @@
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(mem%!(address%<<2),4): PROC_selectwin(0)
+      IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
       =M%!(address%<<2)
 
 
@@ -239,7 +238,7 @@
             IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
             IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
             IF (C%AND&80)=&80THEN A%=0: REM CLA
-            IF (C%AND2)  =  2THEN PRINT"CPU Halt":PROCcommand
+            IF (C%AND2)  =  2THEN PRINT'"CPU HALT"':PROCcommand
             IF (C%AND4)  =  4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
             IF (C%AND8)=0 THEN
               IF cond%=TRUE THEN P%=(P%+1)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
@@ -280,7 +279,7 @@
       ENDPROC
       :
 
-      DEFPROCstatus(P%)
+      DEFFNstatus(P%)
       LOCAL singletemp%,C%,contentsd%,dis$
       singletemp%=S%:S%=FALSE:REM suppress diagnostic messages during status output
       C%=FNexamine(I%+P%)
@@ -387,7 +386,7 @@
       ENDPROC
       :
       DEFPROCcommand
-      LOCALc$,p%:PRINTFNstatus(pc%):REM S%=TRUE:REM *********** TEST *****************
+      LOCALc$,p%:PRINTFNstatus(P%):REM S%=TRUE:REM *********** TEST *****************
       PRINT "Stopped. ";
       REPEAT
       OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step toggle/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
@@ -403,7 +402,7 @@
             PROC_closewin(1)
           ENDIF
         WHEN "E":
-          INPUT"EXAMINE ADDRESS";p%:PRINTM%?FNo2d(p%)
+          INPUT"EXAMINE ADDRESS";p%:PRINTM%!(FNo2d(p%)<<2)
         WHEN "P":
           INPUT"PC";p%:P%=FNo2d(p%)
         WHEN "D":
