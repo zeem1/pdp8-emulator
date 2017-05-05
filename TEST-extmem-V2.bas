@@ -1,12 +1,20 @@
       INSTALL @dir$+"/Number.bbc"
+      INSTALL @lib$+"/multiwin.bbc"
+      PROC_multiwin(1):REM Multiple window support, 1 window
+      PROC_selectwin(0)
+
+      REM ON ERROR PROC_closewin(1):END
+
       MODE 3
       S%=FALSE
       REM A%=accumulator, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
       REM S%=single-step enabled, K%=keyboard flag, T%=teleprinter flag
       :
       REM Init machine
+
       DIM M% 131071
-      A%=0:L%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+      A%=0:L%=0::sr%=2047:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE
       t%=TIME
@@ -54,9 +62,10 @@
         PROCexecute
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
-        IF S%=TRUE THEN PROCstatus(startP%): PROCpause
-        REM x%=POS:y%=VPOS:PRINTTAB(0,0);:PROCstatus(startP%):PRINTTAB(x%,y%);
-        REM FORN%=0TO10000000:NEXT
+
+        IF S%=TRUE THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);:
+        REM PROCpause
+     
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
@@ -64,19 +73,21 @@
       IF (eff_M%AND&100) = 0 THEN
         =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
       ELSE
-        temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):IF S% THEN PRINT" indirect ";
+
+    temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM IF S% THEN PRINT" indirect ";
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
         =D%+FNexamine(temp%)
       ENDIF
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      IF S% THEN PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5)
+      IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF S% THEN PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4)
+      IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(mem%!(address%<<2),4): PROC_selectwin(0)
       =M%!(address%<<2)
+
 
       :
       DEFPROCexecute
@@ -223,12 +234,13 @@
             REM IF (C%AND2)  =  2 THEN : REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
             cond%=FALSE
+
             IF (C%AND&40)=&40THENIF A%>2047 cond%=TRUE: REM SMA - Skip on AC < 0 (or group)  | SPA – Skip on AC ≥ 0 (and group)
             IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
             IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
             IF (C%AND&80)=&80THEN A%=0: REM CLA
             IF (C%AND2)  =  2THEN PRINT"CPU Halt":PROCcommand
-            IF (C%AND4)  =  4THEN A%=A% OR 2047:REM OSR - logically 'or' front-panel switches with AC (*** TEST WITH 3777 ***)
+            IF (C%AND4)  =  4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
             IF (C%AND8)=0 THEN
               IF cond%=TRUE THEN P%=(P%+1)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
             ELSE
@@ -267,6 +279,7 @@
       ENDIF
       ENDPROC
       :
+
       DEFPROCstatus(P%)
       LOCAL singletemp%,C%,contentsd%,dis$
       singletemp%=S%:S%=FALSE:REM suppress diagnostic messages during status output
@@ -364,23 +377,31 @@
             ENDIF
         ENDCASE
       ENDCASE
-      PRINT "IF:";I%>>12;" DF:";D%>>12;" PC:";FNo0(P%,4);" LINK:";L% ;" AC:";FNo0(A%,4);" INT:";int%;" INSTR:";FNo0(C%,4);" (";dis$;")          "
-      REM PRINT "Contents of 7767,7777: ";FNo0(M%(&FFE),4); " ";FNo0(M%(&FFF),4); "   "
+
       S%=singletemp%:REM re-enable diagnostic messages
-      ENDPROC
+      ="IF:"+STR$(I%>>12)+" DF:"+STR$(D%>>12)+" PC:"+FNo0(P%,4)+" LINK:"+STR$L%+" AC:"+FNo0(A%,4)+" INT:"+STR$int%+" INSTR:"+FNo0(C%,4)+" ("+dis$+")"
+
       :
       DEFPROCpause
       REPEATUNTILGET=32
       ENDPROC
       :
       DEFPROCcommand
-      LOCALc$,p%:PROCstatus(P%):REM S%=TRUE:REM *********** TEST *****************
+      LOCALc$,p%:PRINTFNstatus(pc%):REM S%=TRUE:REM *********** TEST *****************
       PRINT "Stopped. ";
       REPEAT
       OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step toggle/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
           S%=NOT S%
+          IF S%=TRUE THEN
+            st_handle%=FN_createwin(1,"Diagnostic output",100,100,640,512,0,0,0)
+            PROC_selectwin(1)
+            OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
+            PROC_selectwin(0)
+          ELSE
+            PROC_closewin(1)
+          ENDIF
         WHEN "E":
           INPUT"EXAMINE ADDRESS";p%:PRINTM%?FNo2d(p%)
         WHEN "P":
@@ -427,6 +448,10 @@
       WHEN "A":
       WHEN "M":
       WHEN "S":
+        REPEAT
+          PRINT "Current switch register is ";FNo0(sr%,4):INPUT "Enter New Octal Value (0-7777):"c%
+        UNTIL VAL(LEFT$(STR$c%,1))>=0 AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=0 AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=0 AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=0 AND VAL(RIGHT$(STR$c%,1))<=7
+        sr%=FNo2d(c%)
       WHEN "D":
         REPEAT
           PRINT "Current data field is ";D%>>12:INPUT "Enter New Field (0-7):"c%
