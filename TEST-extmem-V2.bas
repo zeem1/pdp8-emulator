@@ -20,7 +20,7 @@
       t%=TIME
 
       REM Memory control
-      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
+      I%=7:D%=7:insbuffer%=7:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
       :
       REM Initial program e.g. RIM loader
       REM FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT:REM ***** BODGE TEST TO MEMORY FIELD 1 GOES HERE*****
@@ -32,7 +32,7 @@
       REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
       hstflag%=FALSE:hstbuffer%=0
 
-      S%=FALSE:U%=TRUE:PROCopen_status:REM temp - to allow single-step enable at beginning
+      S%=TRUE:U%=TRUE:PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
       :
       INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
@@ -147,7 +147,7 @@
               PROCtape
               CASE (C% AND 7) OF
                 WHEN 1: REM RSF; Reader skip if flag
-                  IF hstflag%=TRUE THEN P%+=1
+                  IF hstflag%=TRUE THEN P%=(P%+1)AND&FFF
                 WHEN 2: REM RRB; Read Reader Buffer
                   A%=A% OR hstbuffer%
                 WHEN 4: REM RFC; Reader Flag Clear
