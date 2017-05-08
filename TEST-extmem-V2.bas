@@ -6,9 +6,9 @@
       REM ON ERROR PROC_closewin(1):END
 
       MODE 3
-      S%=FALSE
+
       REM A%=accumulator, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
-      REM S%=single-step enabled, K%=keyboard flag, T%=teleprinter flag
+      REM S%=single-step enabled, U%=Status display enabled, K%=keyboard flag, T%=teleprinter flag
       :
       REM Init machine
 
@@ -31,6 +31,9 @@
       REM file%=OPENIN(@dir$+"/focal.rim")
       REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
       hstflag%=FALSE:hstbuffer%=0
+
+      S%=FALSE:U%=TRUE:PROCopen_status:REM temp - to allow single-step enable at beginning
+
       :
       INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
@@ -48,7 +51,7 @@
           PROCcommand:REM need to get start PC from user
         WHEN "R":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
-          FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
+          FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
           DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
           P%=&FEE:REM Start the RIM loader, load the BIN loader
       ENDCASE
@@ -63,7 +66,8 @@
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
 
-        IF S%=TRUE THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);:REM PROCpause
+        IF U% THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);
+        IF S% THEN PROCpause
 
       UNTIL FALSE
       :
@@ -230,7 +234,7 @@
             IF (C%AND8)  =  8 THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RAR rotate <L,AC> right
             IF (C%AND6)  =  6 THEN A%=A%<<1:A%=A%+L%:L%=(A% AND &1000)>>12:A%=A% AND &FFF: REM RTL rotate <L,AC> left twice
             IF (C%AND&A) = &A THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RTR rotate <L,AC> right twice
-            REM IF (C%AND2)  =  2 THEN : REM BSW (8e and up)
+            IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6): PRINT"BSW":PROCpause:REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
             cond%=FALSE
 
@@ -389,15 +393,14 @@
       LOCALc$,p%:PRINTFNstatus(P%):REM S%=TRUE:REM *********** TEST *****************
       PRINT "Stopped. ";
       REPEAT
-      OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step toggle/Save core (I)mage",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step/Save core (I)mage/Stat(u)s Display",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
           S%=NOT S%
-          IF S%=TRUE THEN
-            st_handle%=FN_createwin(1,"Diagnostic output",100,100,640,512,0,0,0)
-            PROC_selectwin(1)
-            OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
-            PROC_selectwin(0)
+        WHEN "U":
+          U%=NOT U%
+          IF U%=TRUE THEN
+            PROCopen_status
           ELSE
             PROC_closewin(1)
           ENDIF
@@ -460,8 +463,14 @@
         REPEAT
           PRINT "Current instruction field is ";I%>>12:INPUT "Enter New Field (0-7):"c%
         UNTIL c%>=0 AND c%<=7
-        I%=c%<<12
+        I%=c%<<12:insbuffer%=I%:REM second one is a test for problem when manually depositing IF
 
       ENDCASE
       ENDPROC
 
+      DEFPROCopen_status
+      st_handle%=FN_createwin(1,"Diagnostic output",100,100,640,512,0,0,0)
+      PROC_selectwin(1)
+      OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
+      PROC_selectwin(0)
+      ENDPROC
