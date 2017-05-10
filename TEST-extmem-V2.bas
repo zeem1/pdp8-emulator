@@ -33,7 +33,7 @@
       REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
       hstflag%=FALSE:hstbuffer%=0
 
-      S%=TRUE:U%=TRUE:PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
       :
       INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
@@ -72,22 +72,41 @@
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
-      LOCAL temp%
+      LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
-        =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+        result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+        IF U% THEN PRINT#test%,"FNaddr, direct lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
       ELSE
-        temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM IF S% THEN PRINT" indirect ";
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM IF S% THEN PRINT" indirect ";
         IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        =D%+FNexamine(temp%)
+        result%=FNexamine(D%+temp%)
+        IF U% THEN PRINT#test%,"FNaddr, indirect lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
       ENDIF
+      =result%
+
+      DEFFNaddr_jump(eff_M%)
+      LOCAL temp% ,result%
+      IF (eff_M%AND&100) = 0 THEN
+        result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+        IF U% THEN PRINT#test%,"FNaddr_jump, direct lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+      ELSE
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM IF S% THEN PRINT" indirect ";
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
+        result%=I%+FNexamine(temp%)
+        IF U% THEN PRINT#test%,"FNaddr_jump, indirect lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+      ENDIF
+      =result%
+
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
       REM IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
+      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
       REM IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
+      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
@@ -105,9 +124,9 @@
           ENDIF
           P%=(P%+1)AND&FFF
         WHEN &400:  REM ISZ - increment operand and skip if result is zero
-          addr%=FNaddr(C%)
-          PROCdeposit(addr%,(FNexamine(addr%)+1)AND&FFF)
-          IFFNexamine(addr%)=FALSE THENP%=(P%+1)AND&FFF
+          addr%=FNaddr(C%):temp%=(FNexamine(addr%)+1)AND&FFF
+          PROCdeposit(addr%,temp%)
+          IFtemp%=FALSE THENP%=(P%+1)AND&FFF
           REM temp%=(FNexamine(FNaddr(C%))+1)AND&FFF:PROCdeposit(FNaddr(C%),temp%)
           REM IF NOT temp% THENP%=(P%+1)AND&FFF
           P%=(P%+1)AND&FFF
@@ -118,12 +137,12 @@
         WHEN &800:  REM JMS - jump to subroutine
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          PROCdeposit(FNaddr(C%) ,P%+1)
-          P%=(FNaddr(C%))+1
+          PROCdeposit(FNaddr_jump(C%) ,P%+1)
+          P%=(FNaddr_jump(C%))+1
         WHEN &A00:  REM JMP - jump
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          P%=FNaddr(C%)
+          P%=FNaddr_jump(C%)
         WHEN &C00:  REM IOT - input/output transfer
           CASE (C% AND &1F8) OF
             WHEN 0:  REM Program Interrupt and flag (internal IOT)
