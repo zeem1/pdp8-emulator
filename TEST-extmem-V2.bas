@@ -2,6 +2,7 @@
       INSTALL @lib$+"/multiwin.bbc"
       PROC_multiwin(1):REM Multiple window support, 1 window
       PROC_selectwin(0)
+      test%=OPENOUT(@dir$+"/trace.log")
 
       REM ON ERROR PROC_closewin(1):END
 
@@ -20,7 +21,7 @@
       t%=TIME
 
       REM Memory control
-      I%=7<<12:D%=7<<12:insbuffer%=7<<12:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
+      I%=0<<12:D%=0<<12:insbuffer%=0<<12:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
       :
       REM Initial program e.g. RIM loader
       REM FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
@@ -66,7 +67,7 @@
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
 
-        IF U% THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):PRINTFNstatus(startpc%):PROC_selectwin(0):PRINTTAB(xt%,yt%);
+        IF U% THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$:PROC_selectwin(0):PRINTTAB(xt%,yt%);
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -82,16 +83,15 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
+      REM IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
+      REM IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
       =M%!(address%<<2)
       :
       DEFPROCexecute
       LOCAL addr%,temp%
-      PROC_selectwin(1):PRINT "Examine at start of execute, I%=";FNo0(I%,5);" P%=";FNo0(P%,4):PROC_selectwin(0)
       C%=FNexamine(I%+P%)
       CASE (C% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
@@ -219,7 +219,7 @@
         ENDIF
         P%=(P%+1)AND&FFF
       WHEN &E00:  REM OPR - microcoded operations
-        CASE (C% AND &F01) OF
+        CASE (C% AND &F00) OF
           WHEN &E00:REM Group 1 (%1110xxxxxxxx)
             IF (C%AND&80)=&80 THEN A%=0:REM CLA
             IF (C%AND&40)=&40 THEN L%=FALSE  :REM CLL
@@ -230,7 +230,7 @@
             IF (C%AND8)  =  8 THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RAR rotate <L,AC> right
             IF (C%AND6)  =  6 THEN A%=A%<<1:A%=A%+L%:L%=(A% AND &1000)>>12:A%=A% AND &FFF: REM RTL rotate <L,AC> left twice
             IF (C%AND&A) = &A THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RTR rotate <L,AC> right twice
-            IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6): PRINT"BSW":PROCpause:REM BSW (8e and up)
+            IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6):REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
             cond%=FALSE
 
@@ -337,8 +337,8 @@
           WHEN 34: dis$="TCF"
           WHEN 36: dis$="TPC"
           WHEN 38: dis$="TLS ["+FNo0(ASC(LEFT$(ttybuf$,1)),3)+"]"
-          WHEN 129,137,145,153,161,169,177,185: dis$="CDF "+((C% AND &38) >>3) :REM Memory management
-          WHEN 130,138,146,154,162,170,178,186: dis$="CIF "+((C% AND &38) >>3)
+          WHEN 129,137,145,153,161,169,177,185: dis$="CDF "+STR$((C% AND &38) >>3) :REM Memory management
+          WHEN 130,138,146,154,162,170,178,186: dis$="CIF "+STR$((C% AND &38) >>3)
           WHEN 140: dis$="RDF"
           WHEN 148: dis$="RIF"
           WHEN 156: dis$="RIB"
@@ -352,7 +352,7 @@
           OTHERWISE:dis$="IOT "+FNo0(C%AND&1FF,3)
         ENDCASE
       WHEN &E00:
-        CASE (C%AND &F01) OF
+        CASE (C%AND &F00) OF
           WHEN &E00:REM Group 1 (%1110xxxxxxxx)
             IF (C%AND&80)=&80 THEN dis$=dis$+"CLA "
             IF (C%AND&40)=&40 THEN dis$=dis$+"CLL "
@@ -377,6 +377,7 @@
               IF (C%AND&20)=&20 THEN dis$=dis$+"SZA "
               IF (C%AND&10)=&10 THEN dis$=dis$+"SNL "
               IF (C%AND&80)=&80 THEN dis$=dis$+"CLA "
+              IF (C%AND2)  =  2 THEN dis$=dis$+"HLT "
             ENDIF
           WHEN &F01: REM Group 3 (%1111xxxxxxx1); MQ instructions
             IF (C%AND208)=128THENdis$=dis$+"CLA "
@@ -475,7 +476,7 @@
       ENDPROC
 
       DEFPROCopen_status
-      st_handle%=FN_createwin(1,"Diagnostic output",100,100,640,512,0,0,0)
+      st_handle%=FN_createwin(1,"Diagnostic output",100,100,640,256,0,0,0)
       PROC_selectwin(1)
       OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
       PROC_selectwin(0)
