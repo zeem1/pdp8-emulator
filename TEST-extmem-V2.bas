@@ -75,25 +75,21 @@
       LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
         result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
-        IF U% THEN PRINT#test%,"FNaddr, instruction "+FNo0(eff_M%,5)+" (direct), result "+FNo0(result%,5)
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
         IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
         result%=D%+FNexamine(I%+temp%)
-        IF U% THEN PRINT#test%,"FNaddr, instruction "+FNo0(eff_M%,5)+" (indirect), examining "+FNo0(I%+temp%,5)+", result "+FNo0(result%,5)
       ENDIF
       =result%
 
       DEFFNaddr_jump(eff_M%)
       LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
-        result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
-        IF U% THEN PRINT#test%,"FNaddr_jump, instruction "+FNo0(eff_M%,5)+" (direct), result "+FNo0(result%,5)
+        result%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM direct
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
         IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        result%=I%+FNexamine(I%+temp%)
-        IF U% THEN PRINT#test%,"FNaddr_jump, instruction "+FNo0(eff_M%,5)+" (indirect), examining "+FNo0(I%+temp%,5)+", result "+FNo0(result%,5)
+        result%=FNexamine(I%+temp%)
       ENDIF
       =result%
 
@@ -216,7 +212,8 @@
                   REM PRINT "[CIF "; (C% AND &38)>>3;"]" ;
                 WHEN 3: REM 62X3 CDI; Change Data and Instruction Fields
                   REM D%=(M%(P%) AND &38)>>3
-                  D%=(M%(P%) AND &38)>>9
+                  REM What is this supposed to do?? D%=(M%!(P%<<2) AND &38)>>9
+                  D%=(C% AND &38)<<9
                   insbuffer%=D%:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CDI "; (C% AND &38)>>3;"]";
@@ -301,9 +298,9 @@
       :
 
       DEFFNstatus(P%)
-      LOCAL singletemp%,C%,dis$
+      LOCAL singletemp%,dis$:REM C% was also local - see below
       singletemp%=S%:S%=FALSE:REM suppress diagnostic messages during status output
-      C%=FNexamine(I%+P%)
+      REM Not needed? C% is global and set during instruction fetch - C%=FNexamine(I%+P%)
       CASE (C% AND &E00) OF
       WHEN 0,&200,&400,&600,&800,&A00:
         CASE (C% AND &E00) OF
@@ -321,7 +318,7 @@
             dis$="JMP "
         ENDCASE
         IF (C%AND &100)=&100 THEN
-          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(FNexamine(D%+((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)),4) + ")"
+          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(FNexamine(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)),4) + ")"
         ELSE
           dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
         ENDIF
