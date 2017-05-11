@@ -14,7 +14,7 @@
       REM Init machine
 
       DIM M% 131071
-      A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+      P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
 
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE
@@ -42,13 +42,13 @@
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME",F$
           file%=OPENIN(@dir$+"/"+F$)
-          address%=I%:S%=FALSE:REM TEST ****************************
+          address%=I%
           REPEAT
             byte1%=BGET#file%:byte2%=BGET#file%
             PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
             address%+=1
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
-          PRINT"LOADED "+F$+" IMAGE" :S%=TRUE:REM  TEST ****************************
+          PRINT"LOADED "+F$+" IMAGE"
           PROCcommand:REM need to get start PC from user
         WHEN "R":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
@@ -75,12 +75,12 @@
       LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
         result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
-        IF U% THEN PRINT#test%,"FNaddr, direct lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+        IF U% THEN PRINT#test%,"FNaddr, instruction "+FNo0(eff_M%,5)+" (direct), result "+FNo0(result%,5)
       ELSE
-        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM IF S% THEN PRINT" indirect ";
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        result%=FNexamine(D%+temp%)
-        IF U% THEN PRINT#test%,"FNaddr, indirect lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
+        result%=D%+FNexamine(I%+temp%)
+        IF U% THEN PRINT#test%,"FNaddr, instruction "+FNo0(eff_M%,5)+" (indirect), examining "+FNo0(I%+temp%,5)+", result "+FNo0(result%,5)
       ENDIF
       =result%
 
@@ -88,12 +88,12 @@
       LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
         result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
-        IF U% THEN PRINT#test%,"FNaddr_jump, direct lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+        IF U% THEN PRINT#test%,"FNaddr_jump, instruction "+FNo0(eff_M%,5)+" (direct), result "+FNo0(result%,5)
       ELSE
-        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM IF S% THEN PRINT" indirect ";
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        result%=I%+FNexamine(temp%)
-        IF U% THEN PRINT#test%,"FNaddr_jump, indirect lookup "+FNo0(eff_M%,5)+", result "+FNo0(result%,5)
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
+        result%=I%+FNexamine(I%+temp%)
+        IF U% THEN PRINT#test%,"FNaddr_jump, instruction "+FNo0(eff_M%,5)+" (indirect), examining "+FNo0(I%+temp%,5)+", result "+FNo0(result%,5)
       ENDIF
       =result%
 
@@ -252,7 +252,6 @@
             IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6):REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
             cond%=FALSE
-
             IF (C%AND&40)=&40THENIF A%>2047 cond%=TRUE: REM SMA - Skip on AC < 0 (or group)  | SPA – Skip on AC ≥ 0 (and group)
             IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
             IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
@@ -286,9 +285,7 @@
       ENDPROC
       :
       DEFPROCtprinter
-      REM LOCAL ttemp$
       IFLENttybuf$>0THEN
-      REM ttemp$=LEFT$(ttybuf$,1)
       IFASCttybuf$<127THENVDUASCttybuf$
       ttybuf$="":T%=TRUE
       ENDIF
@@ -298,7 +295,7 @@
       REM HS Tape
       IF (NOT EOF#file%) THEN
       IF hstflag%= FALSE THEN hstbuffer%=BGET#file%:hstflag%=TRUE
-      ELSE hstflag%=FALSE:REM PTR#file%=0
+      ELSE hstflag%=FALSE
       ENDIF
       ENDPROC
       :
@@ -461,7 +458,7 @@
       INPUT"NUMBER OF WORDS",count%
       file%=OPENOUT(@dir$+"/"+F$)
       FORn%=0TOcount%-1
-      word%=((M%?(n%+32768))<<4)+M%?n%
+      word%=M%!(n%<<2)
       byte1%=((word%AND&FC0)>>6)+33:byte2%=(word%AND&3F)+33
       BPUT#file%,byte1%:BPUT#file%,byte2%
       IF count%DIV64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
