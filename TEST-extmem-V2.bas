@@ -13,28 +13,14 @@
       :
       REM Init machine
 
-      DIM M% 131071
-      P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
-
+      DIM M% 131071:P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
+      REM Memory control
+      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
       REM TTY/TAPE flags/buffers
-      kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE
+      kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
       t%=TIME
 
-      REM Memory control
-      I%=0<<12:D%=0<<12:insbuffer%=0<<12:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
-      :
-      REM Initial program e.g. RIM loader
-      REM FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
-      REM (test &80 to &86 : DATA &E80,&285,&E04,&A81,0,1,4095)
-      REM HST RIM loader (7756 to 7777, &fee to &fff):
-      REM DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
-      REM ** read in a RIM file **
-      REM file%=OPENIN(@dir$+"/focal.rim")
-      REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
-      hstflag%=FALSE:hstbuffer%=0
-
       S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
-
       :
       INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
@@ -45,14 +31,14 @@
           address%=I%
           REPEAT
             byte1%=BGET#file%:byte2%=BGET#file%
-            PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
+            M%!(address%<<2)=(byte1%-33<<6) + byte2%-33
             address%+=1
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
           PROCcommand:REM need to get start PC from user
         WHEN "R":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
-          FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
+          FOR c%=&FEE TO &FFF:READ d%:M%!(I%+c%<<2)=d%:NEXT
           DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
           P%=&FEE:REM Start the RIM loader, load the BIN loader
       ENDCASE
@@ -62,11 +48,10 @@
         startpc%=P%:REM for status
         IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
         IF idefer% THEN idefer%+=1
-        IF(K% OR T% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):P%=1
+        IF(K% OR T% )AND (int% AND icontrol%) THEN int%=FALSE:!M%=P%:intbuffer%=(I%>>9)+(D%>>12):P%=1
         PROCexecute
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
-
         IF U% THEN xt%=POS:yt%=VPOS:PROC_selectwin(1):d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$:PROC_selectwin(0):PRINTTAB(xt%,yt%);
         IF S% THEN PROCpause
       UNTIL FALSE
@@ -77,58 +62,48 @@
         =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
-        =D%+FNexamine(I%+temp%)
+        IF temp%>7 AND temp%<16 THEN M%!(I%+temp%<<2)=M%!(I%+temp%<<2)+1AND&FFF
+        =D%+M%!(I%+temp%<<2)
       ENDIF
 
       DEFFNaddr_jump(eff_M%)
       LOCAL temp%
       IF (eff_M%AND&100) = 0 THEN
-        result%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM direct
+        =((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM direct
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
-        =FNexamine(I%+temp%)
+        IF temp%>7 AND temp%<16 THEN M%!(I%+temp%<<2)=M%!(I%+temp%<<2)+1AND&FFF
+        =M%!(I%+temp%<<2)
       ENDIF
-
-      :
-      DEFPROCdeposit(address%,word%)
-      M%!(address%<<2)=word%
-      ENDPROC
-      :
-      DEFFNexamine(address%)
-      =M%!(address%<<2)
       :
       DEFPROCexecute
       LOCAL addr%,temp%
-      C%=FNexamine(I%+P%)
+      C%=M%!(I%+P%<<2)
       CASE (C% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
-          A%=A% AND FNexamine(FNaddr(C%))
+          A%=A% AND M%!(FNaddr(C%)<<2)
           P%=(P%+1)AND&FFF
         WHEN &200:  REM TAD - add operand to (a 13 bit value)
-          A%=A%+FNexamine(FNaddr(C%))
+          A%=A%+M%!(FNaddr(C%)<<2)
           IF A%>4095 THEN
             A%=A%-4096
             L%=(NOT L%)AND1
           ENDIF
           P%=(P%+1)AND&FFF
         WHEN &400:  REM ISZ - increment operand and skip if result is zero
-          addr%=FNaddr(C%):temp%=(FNexamine(addr%)+1)AND&FFF
-          PROCdeposit(addr%,temp%)
+          addr%=FNaddr(C%):temp%=(M%!(addr%<<2))+1AND&FFF
+          M%!(addr%<<2)=temp%
           IFtemp%=FALSE THENP%=(P%+1)AND&FFF
-          REM temp%=(FNexamine(FNaddr(C%))+1)AND&FFF:PROCdeposit(FNaddr(C%),temp%)
-          REM IF NOT temp% THENP%=(P%+1)AND&FFF
           P%=(P%+1)AND&FFF
         WHEN &600:  REM DCA - deposit AC in memory and clear AC
-          PROCdeposit(FNaddr(C%),A%)
+          M%!(FNaddr(C%)<<2)=A%
           A%=0
           P%=(P%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          PROCdeposit(FNaddr_jump(C%) ,P%+1)
-          P%=(FNaddr_jump(C%))+1
+          M%!(FNaddr_jump(C%)<<2)=P%+1
+          P%=FNaddr_jump(C%)+1
         WHEN &A00:  REM JMP - jump
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
@@ -205,8 +180,6 @@
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CIF "; (C% AND &38)>>3;"]" ;
                 WHEN 3: REM 62X3 CDI; Change Data and Instruction Fields
-                  REM D%=(M%(P%) AND &38)>>3
-                  REM What is this supposed to do?? D%=(M%!(P%<<2) AND &38)>>9
                   D%=(C% AND &38)<<9
                   insbuffer%=D%:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
@@ -224,7 +197,6 @@
                       insbuffer%=(intbuffer% AND &38)<<9
                   ENDCASE
               ENDCASE
-
           ENDCASE
         ENDIF
         P%=(P%+1)AND&FFF
@@ -290,11 +262,9 @@
       ENDIF
       ENDPROC
       :
-
       DEFFNstatus(P%)
-      LOCAL singletemp%,dis$:REM C% was also local - see below
+      LOCAL singletemp%,dis$
       singletemp%=S%:S%=FALSE:REM suppress diagnostic messages during status output
-      REM Not needed? C% is global and set during instruction fetch - C%=FNexamine(I%+P%)
       CASE (C% AND &E00) OF
       WHEN 0,&200,&400,&600,&800,&A00:
         CASE (C% AND &E00) OF
@@ -312,7 +282,7 @@
             dis$="JMP "
         ENDCASE
         IF (C%AND &100)=&100 THEN
-          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(FNexamine(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)),4) + ")"
+          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(M%!(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)<<2),4) + ")"
         ELSE
           dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
         ENDIF
@@ -366,11 +336,11 @@
             IF (C%AND&20)=&20 THEN dis$=dis$+"CMA "
             IF (C%AND&10)=&10 THEN dis$=dis$+"CML "
             IF (C%AND1)  =  1 THEN dis$=dis$+"IAC "
-            IF (C%AND4)  =  4 THEN dis$=dis$+"RAL "
-            IF (C%AND8)  =  8 THEN dis$=dis$+"RAR "
-            IF (C%AND6)  =  6 THEN dis$=LEFT$(dis$,LEN(dis$)-4):dis$=dis$+"RTL "
-            IF (C%AND&A) = &A THEN dis$=LEFT$(dis$,LEN(dis$)-4):dis$=dis$+"RTR "
-            IF (C%AND14)  =  2 THEN dis$=dis$+"BSW "
+            IF (C%AND14) =  4 THEN dis$=dis$+"RAL "
+            IF (C%AND14) =  8 THEN dis$=dis$+"RAR "
+            IF (C%AND14) =  6 THEN dis$=dis$+"RTL "
+            IF (C%AND14) = 10 THEN dis$=dis$+"RTR "
+            IF (C%AND14) =  2 THEN dis$=dis$+"BSW "
           WHEN &F00:REM Group 2 (%1111xxxxxxx0), AND/OR group
             IF (C%AND8)=8 THEN
               IF (C%AND&40)=&40 THEN dis$=dis$+"SPA "
@@ -394,10 +364,8 @@
             IF (C%AND208)=144THENdis$=dis$+"CAM ":
         ENDCASE
       ENDCASE
-
       S%=singletemp%:REM re-enable diagnostic messages
       ="IF:"+STR$(I%>>12)+" DF:"+STR$(D%>>12)+" PC:"+FNo0(P%,4)+" L:"+STR$L%+" AC:"+FNo0(A%,4)+" MQ:"+FNo0(Q%,4)+" INT:"+STR$int%+" INST:"+FNo0(C%,4)+" ("+dis$+")"
-
       :
       DEFPROCpause
       REPEATUNTILGET=32
@@ -478,7 +446,6 @@
           PRINT "Current instruction field is ";I%>>12:INPUT "Enter New Field (0-7):"c%
         UNTIL c%>=0 AND c%<=7
         I%=c%<<12:insbuffer%=I%:REM second one is a test for problem when manually depositing IF
-
       ENDCASE
       ENDPROC
 
