@@ -72,37 +72,31 @@
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
-      LOCAL temp% ,result%
+      LOCAL temp%
       IF (eff_M%AND&100) = 0 THEN
-        result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+        =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        result%=D%+FNexamine(I%+temp%)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
+        =D%+FNexamine(I%+temp%)
       ENDIF
-      =result%
 
       DEFFNaddr_jump(eff_M%)
-      LOCAL temp% ,result%
+      LOCAL temp%
       IF (eff_M%AND&100) = 0 THEN
         result%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM direct
       ELSE
         temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        result%=FNexamine(I%+temp%)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
+        =FNexamine(I%+temp%)
       ENDIF
-      =result%
 
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      REM IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
-      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
-      REM IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
-      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
