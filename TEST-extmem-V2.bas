@@ -14,7 +14,7 @@
       REM Init machine
 
       DIM M% 131071
-      A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 test (0200), &FEE for RIM load
+      P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
 
       REM TTY/TAPE flags/buffers
       kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE
@@ -33,7 +33,7 @@
       REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
       hstflag%=FALSE:hstbuffer%=0
 
-      S%=TRUE:U%=TRUE:PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
       :
       INPUT"RIM/BIN load or core image load (R/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
@@ -42,13 +42,13 @@
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME",F$
           file%=OPENIN(@dir$+"/"+F$)
-          address%=I%:S%=FALSE:REM TEST ****************************
+          address%=I%
           REPEAT
             byte1%=BGET#file%:byte2%=BGET#file%
             PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):REM PRINT FNo0(address%,4);" ";FNo0(word%,4);" ";
             address%+=1
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
-          PRINT"LOADED "+F$+" IMAGE" :S%=TRUE:REM  TEST ****************************
+          PRINT"LOADED "+F$+" IMAGE"
           PROCcommand:REM need to get start PC from user
         WHEN "R":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
@@ -72,22 +72,37 @@
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
-      LOCAL temp%
+      LOCAL temp% ,result%
       IF (eff_M%AND&100) = 0 THEN
-        =I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+        result%=I%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
       ELSE
-        temp%=D%+(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM IF S% THEN PRINT" indirect ";
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(temp%,(FNexamine(temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
-        =D%+FNexamine(temp%)
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
+        result%=D%+FNexamine(I%+temp%)
       ENDIF
+      =result%
+
+      DEFFNaddr_jump(eff_M%)
+      LOCAL temp% ,result%
+      IF (eff_M%AND&100) = 0 THEN
+        result%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F):REM direct
+      ELSE
+        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
+        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF):REM PRINT "Indirect ref through ";FNo0(temp%,4);", incrementing to ";FNo0(M%(temp%),4)
+        result%=FNexamine(I%+temp%)
+      ENDIF
+      =result%
+
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
       REM IF S% THEN PROC_selectwin(1):PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): PROC_selectwin(0)
+      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
       REM IF S% THEN PROC_selectwin(1):PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): PROC_selectwin(0)
+      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
@@ -105,9 +120,9 @@
           ENDIF
           P%=(P%+1)AND&FFF
         WHEN &400:  REM ISZ - increment operand and skip if result is zero
-          addr%=FNaddr(C%)
-          PROCdeposit(addr%,(FNexamine(addr%)+1)AND&FFF)
-          IFFNexamine(addr%)=FALSE THENP%=(P%+1)AND&FFF
+          addr%=FNaddr(C%):temp%=(FNexamine(addr%)+1)AND&FFF
+          PROCdeposit(addr%,temp%)
+          IFtemp%=FALSE THENP%=(P%+1)AND&FFF
           REM temp%=(FNexamine(FNaddr(C%))+1)AND&FFF:PROCdeposit(FNaddr(C%),temp%)
           REM IF NOT temp% THENP%=(P%+1)AND&FFF
           P%=(P%+1)AND&FFF
@@ -118,12 +133,12 @@
         WHEN &800:  REM JMS - jump to subroutine
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          PROCdeposit(FNaddr(C%) ,P%+1)
-          P%=(FNaddr(C%))+1
+          PROCdeposit(FNaddr_jump(C%) ,P%+1)
+          P%=(FNaddr_jump(C%))+1
         WHEN &A00:  REM JMP - jump
           icontrol%=TRUE:REM re-enable interrupts via separate memory management control
           I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          P%=FNaddr(C%)
+          P%=FNaddr_jump(C%)
         WHEN &C00:  REM IOT - input/output transfer
           CASE (C% AND &1F8) OF
             WHEN 0:  REM Program Interrupt and flag (internal IOT)
@@ -197,7 +212,8 @@
                   REM PRINT "[CIF "; (C% AND &38)>>3;"]" ;
                 WHEN 3: REM 62X3 CDI; Change Data and Instruction Fields
                   REM D%=(M%(P%) AND &38)>>3
-                  D%=(M%(P%) AND &38)>>9
+                  REM What is this supposed to do?? D%=(M%!(P%<<2) AND &38)>>9
+                  D%=(C% AND &38)<<9
                   insbuffer%=D%:REM Buffered until next JMP or JMS instruction
                   icontrol%=FALSE:REM Disable interrupts with separate flip-flop, until next branch
                   REM PRINT "[CDI "; (C% AND &38)>>3;"]";
@@ -233,7 +249,6 @@
             IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6):REM BSW (8e and up)
           WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
             cond%=FALSE
-
             IF (C%AND&40)=&40THENIF A%>2047 cond%=TRUE: REM SMA - Skip on AC < 0 (or group)  | SPA – Skip on AC ≥ 0 (and group)
             IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
             IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
@@ -267,9 +282,7 @@
       ENDPROC
       :
       DEFPROCtprinter
-      REM LOCAL ttemp$
       IFLENttybuf$>0THEN
-      REM ttemp$=LEFT$(ttybuf$,1)
       IFASCttybuf$<127THENVDUASCttybuf$
       ttybuf$="":T%=TRUE
       ENDIF
@@ -279,15 +292,15 @@
       REM HS Tape
       IF (NOT EOF#file%) THEN
       IF hstflag%= FALSE THEN hstbuffer%=BGET#file%:hstflag%=TRUE
-      ELSE hstflag%=FALSE:REM PTR#file%=0
+      ELSE hstflag%=FALSE
       ENDIF
       ENDPROC
       :
 
       DEFFNstatus(P%)
-      LOCAL singletemp%,C%,dis$
+      LOCAL singletemp%,dis$:REM C% was also local - see below
       singletemp%=S%:S%=FALSE:REM suppress diagnostic messages during status output
-      C%=FNexamine(I%+P%)
+      REM Not needed? C% is global and set during instruction fetch - C%=FNexamine(I%+P%)
       CASE (C% AND &E00) OF
       WHEN 0,&200,&400,&600,&800,&A00:
         CASE (C% AND &E00) OF
@@ -305,7 +318,7 @@
             dis$="JMP "
         ENDCASE
         IF (C%AND &100)=&100 THEN
-          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(FNexamine(D%+((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)),4) + ")"
+          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(FNexamine(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)),4) + ")"
         ELSE
           dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
         ENDIF
@@ -442,7 +455,7 @@
       INPUT"NUMBER OF WORDS",count%
       file%=OPENOUT(@dir$+"/"+F$)
       FORn%=0TOcount%-1
-      word%=((M%?(n%+32768))<<4)+M%?n%
+      word%=M%!(n%<<2)
       byte1%=((word%AND&FC0)>>6)+33:byte2%=(word%AND&3F)+33
       BPUT#file%,byte1%:BPUT#file%,byte2%
       IF count%DIV64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
