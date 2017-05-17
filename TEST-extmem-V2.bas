@@ -281,11 +281,13 @@
           WHEN &A00:
             dis$="JMP "
         ENDCASE
-        IF (C%AND &100)=&100 THEN
-          dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(M%!(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)<<2),4) + ")"
-        ELSE
-          dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
-        ENDIF
+        IF (C%AND &100)=&100 THEN dis$=dis$+"I "
+        REM dis$=dis$+"I "+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)+" ("+FNo0(M%!(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)<<2),4) + ")"
+        REM ELSE
+        REM dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
+        REM ENDIF
+        dis$=dis$+FNo0(((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F),4)
+        IF (C%AND &100)=&100 THEN dis$=dis$+" ("+FNo0(D%+M%!(I%+((C% AND &80) >>7)*(P% AND &F80) + (C% AND &7F)<<2),5)+")"
       WHEN &C00:
         CASE (C%AND &1FF) OF
           WHEN 0: dis$="SKON":REM Program Interrupt and flag (internal IOT)
