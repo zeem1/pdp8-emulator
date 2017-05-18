@@ -51,13 +51,18 @@
       REM ** Main loop **
       REPEAT
         startpc%=P%:REM for status
+
         IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
         IF idefer% THEN idefer%+=1
         IF(K% OR T% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):P%=1
         PROCexecute
         IF TIME>t%+20 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
-        IF U% THEN xt%=POS:yt%=VPOS:d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$:PRINTTAB(xt%,yt%);
+        IF U% THEN
+          REM xt%=POS:yt%=VPOS
+          d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$
+          REM PRINTTAB(xt%,yt%);
+        ENDIF
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -167,9 +172,9 @@
                 WHEN 2: REM KCC
                   K%=FALSE:A%=0:REM P%=(P%+1)AND&FFF:REM *** start read from tape goes here
                 WHEN 4: REM KRS
-                  A%=A% OR ASC(LEFT$(kbdbuf$,1)):kbdbuf$="":REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and OR with ac
+                  A%=A% OR ASCkbdbuf$:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1):REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and OR with ac
                 WHEN 6: REM KRB
-                  A%=ASC(LEFT$(kbdbuf$,1)):K%=FALSE:kbdbuf$="":REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and put in ac, clear flag
+                  A%=ASCkbdbuf$:K%=FALSE:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1):REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and put in ac, clear flag
               ENDCASE
             WHEN 32:REM Teletype teleprinter/punch
               CASE (C% AND 7) OF
@@ -259,9 +264,9 @@
       kbdtemp$=INKEY$(0)
       IFkbdtemp$<>""THEN
       IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND223)
-      kbdbuf$=kbdtemp$
+      kbdbuf$=kbdbuf$+kbdtemp$
       ENDIF
-      K%=FALSE:IFLENkbdbuf$>0THENK%=TRUE
+      IFLENkbdbuf$>0THENK%=TRUE ELSEK%=FALSE
       ENDPROC
       :
       DEFPROCtprinter
