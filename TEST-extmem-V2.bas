@@ -24,22 +24,23 @@
       kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
       t%=TIME
 
-      S%=FALSE:U%=TRUE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
-      c$="C":REM INPUT"BIN load or core image load (B/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      INPUT"BIN load or core image load (B/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "C":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
-          F$="instest2.core":REM INPUT"IMAGE FILE NAME",F$
+          INPUT"IMAGE FILE NAME",F$
           file%=OPENIN(@dir$+"/"+F$)
           address%=I%
           REPEAT
-            byte1%=BGET#file%:byte2%=BGET#file%
+            byte1%=BGET#file%:IFbyte1%=&0ATHENbyte1%=BGET#file%
+            byte2%=BGET#file%
             PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
             address%+=1
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
-          REM PROCcommand:REM need to get start PC from user
+          PROCcommand:REM need to get start PC from user
         WHEN "B":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
           FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
@@ -51,12 +52,14 @@
 
       REM ** Main loop **
       REPEAT
-        startpc%=P%:REM for status
-        IF int_inhib% THEN int_inhib%+=1:IF NOT int_inhib% THEN int%=TRUE
+
+        IF int_inhib%<0 THEN int_inhib%+=1:IF NOT int_inhib% THEN int%=TRUE
         IF FNirqline AND int% AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
-        PROCexecute
-        IF TIME>t%+10 THEN PROCkbd:t%=TIME
+        startpc%=P%:REM for status
+        REM IF TIME>t%+10 THEN
+        PROCkbd:REM t%=TIME
         IFINKEY(-114)THENPROCcommand
+        PROCexecute
         IF U% THEN
           REM xt%=POS:yt%=VPOS
           d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$
@@ -192,7 +195,7 @@
                 WHEN 4: REM KRS
                   IFLENkbdbuf$>0 THEN A%=A%ORASCkbdbuf$:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1) ELSE A%=0:REM ** Pull from kbd buffer and OR with ac
                 WHEN 5: REM KIE
-                  kint%=-(A% AND 1):PRINT "SET KINT TO ";kint%;" AC IS ";FNo0(A%,4)
+                  kint%=-(A% AND 1)
                 WHEN 6: REM KRB
                   REM PRINT#test%,"KRB - asc kbdbuf$ = "+STR$ ASCkbdbuf$+" K%="+STR$K%+" kbdbuf$="+kbdbuf$
                   IFLENkbdbuf$>0 THEN A%=ASCkbdbuf$:K%=FALSE:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1) ELSE A%=0:K%=FALSE:REM ** Pull from kbd buffer and put in ac, clear flag
@@ -421,7 +424,7 @@
         ENDCASE
       ENDCASE
       U%=statustemp%:REM re-enable diagnostic messages
-      ="IF:"+STR$(I%>>12)+" DF:"+STR$(D%>>12)+" PC:"+FNo0(P%,4)+" L:"+STR$L%+" AC:"+FNo0(A%,4)+" MQ:"+FNo0(Q%,4)+" INT:"+STR$(int% AND (int_inhib%<0))+" INST:"+FNo0(C%,4)+" ("+dis$+")"
+      ="IF:"+STR$(I%>>12)+" DF:"+STR$(D%>>12)+" PC:"+FNo0(P%,4)+" L:"+STR$L%+" AC:"+FNo0(A%,4)+" MQ:"+FNo0(Q%,4)+" INT:"+STR$(int%)+" INH:"+STR$(int_inhib%)+" KINT:"+STR$kint%+" INST:"+FNo0(C%,4)+" ("+dis$+")"
       :
       DEFPROCpause
       REPEATUNTILGET=32
@@ -468,16 +471,15 @@
       ENDPROC
 
       DEFPROCsavecore
-      LOCAL F$,count%,n%,l%,file%
+      LOCAL F$,count%,n%,l%,file%,word%
       OSCLI"DIR "+@dir$:OSCLI". *.CORE"
       INPUT"IMAGE FILE NAME TO SAVE",F$
       INPUT"NUMBER OF WORDS",count%
       file%=OPENOUT(@dir$+"/"+F$)
       FORn%=0TOcount%-1
-      word%=M%!(n%<<2)
-      byte1%=((word%AND&FC0)>>6)+33:byte2%=(word%AND&3F)+33
-      BPUT#file%,byte1%:BPUT#file%,byte2%
-      IF count%DIV64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
+      word%=FNexamine(n%)
+      BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND&3F)+33
+      IF n%MOD64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
       NEXT:CLOSE#file%
       PRINT"SAVED "+F$+" IMAGE"
       ENDPROC
