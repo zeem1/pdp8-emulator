@@ -16,20 +16,21 @@
       :
       REM Init machine
 
-      DIM M% 131071:P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:idefer%=TRUE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
+      DIM M% 131071:P%=128:A%=0:L%=0:Q%=0:sr%=0:int%=FALSE:ion%=FALSE:REM PC for FOCAL69 or memory test (0200), &FEE for RIM load
       REM Memory control
-      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE:REM IF/DF/buffer 7 FOR TEST ******
+      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
+      REM int%=Interrupts on/off, ion%=ION instruction received/pending
       REM TTY/TAPE flags/buffers
-      kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
+      kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
       t%=TIME
 
       S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
-      :
-      INPUT"BIN load or core image load (B/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+
+      c$="C":REM INPUT"BIN load or core image load (B/C)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "C":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
-          INPUT"IMAGE FILE NAME",F$
+          F$="instest2.core":REM INPUT"IMAGE FILE NAME",F$
           file%=OPENIN(@dir$+"/"+F$)
           address%=I%
           REPEAT
@@ -38,7 +39,7 @@
             address%+=1
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
-          PROCcommand:REM need to get start PC from user
+          REM PROCcommand:REM need to get start PC from user
         WHEN "B":
           file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
           FOR c%=&FEE TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
@@ -51,12 +52,10 @@
       REM ** Main loop **
       REPEAT
         startpc%=P%:REM for status
-
-        IF (NOT idefer%) AND ion% THEN int%=TRUE:ion%=FALSE
-        IF idefer% THEN idefer%+=1
-        IF(K% OR T% )AND (int% AND icontrol%) THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):P%=1
+        IF(K% OR T% )AND (int% AND icontrol% AND NOT ion%) THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         PROCexecute
-        IF TIME>t%+20 THEN PROCkbd:t%=TIME
+        IF ion% THEN ion%+=1
+        IF TIME>t%+10 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
         IF U% THEN
           REM xt%=POS:yt%=VPOS
@@ -137,13 +136,16 @@
                 WHEN 0:  REM SKON
                   IF int%=TRUE THEN P%=(P%+1)AND&FFF
                 WHEN 1: REM ION
-                  ion%=TRUE:idefer%=TRUE
+                  int%=TRUE:ion%=TRUE
                 WHEN 2: REM IOF
                   int%=FALSE
+                WHEN 3: REM SRQ
+                  IF(K% OR T% )THEN P%=(P%+1)AND&FFF
                 WHEN 4: REM GTF
                 WHEN 5: REM RTF
                 WHEN 6: REM SGT
                 WHEN 7: REM CAF
+                  A%=0:L%=0:K%=FALSE:T%=FALSE
               ENDCASE
             WHEN 8: REM HS tape input
               PROCtape
@@ -167,17 +169,24 @@
               ENDCASE
             WHEN 24: REM Teletype keyboard/reader
               CASE (C% AND 7) OF
+                WHEN 0: REM KCF
+                  REM K%=FALSE
                 WHEN 1: REM KSF:
                   IFK%THENP%=(P%+1)AND&FFF
                 WHEN 2: REM KCC
-                  K%=FALSE:A%=0:REM P%=(P%+1)AND&FFF:REM *** start read from tape goes here
+                  K%=FALSE:A%=0:REM *** start read from tape goes here
                 WHEN 4: REM KRS
-                  A%=A% OR ASCkbdbuf$:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1):REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and OR with ac
+                  IFLENkbdbuf$>0 THEN A%=A%ORASCkbdbuf$:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1) ELSE A%=0:REM ** Pull from kbd buffer and OR with ac
+                WHEN 5: REM KIE
+                  kint%=(A% AND 2048)=2048
                 WHEN 6: REM KRB
-                  A%=ASCkbdbuf$:K%=FALSE:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1):REM RIGHT$(kbdbuf$,LENkbdbuf$-1):REM ** Pull from kbd buffer and put in ac, clear flag
+                  REM PRINT#test%,"KRB - asc kbdbuf$ = "+STR$ ASCkbdbuf$+" K%="+STR$K%+" kbdbuf$="+kbdbuf$
+                  IFLENkbdbuf$>0 THEN A%=ASCkbdbuf$:K%=FALSE:kbdbuf$=RIGHT$(kbdbuf$,LENkbdbuf$-1) ELSE A%=0:K%=FALSE:REM ** Pull from kbd buffer and put in ac, clear flag
               ENDCASE
             WHEN 32:REM Teletype teleprinter/punch
               CASE (C% AND 7) OF
+                WHEN0: REM SPF: ****************TEST*****************
+                  T%=TRUE
                 WHEN 1:  REM TSF:
                   IFT%THENP%=(P%+1)AND&FFF
                 WHEN 2: REM TCF
@@ -229,30 +238,34 @@
             IF (C%AND&40)=&40 THEN L%=FALSE  :REM CLL
             IF (C%AND&20)=&20 THEN A%=(NOT A%)AND&FFF:REM CMA
             IF (C%AND&10)=&10 THEN L%=(NOT L%)AND1  :REM CML
-            IF (C%AND1)  =  1 THEN A%=A%+1:IF A%=4096 THEN A%=0:L%=1: REM IAC - increment <L,AC>
+            IF (C%AND1)  =  1 THEN A%+=1:IF A%=4096 THEN A%=0:L%=(NOT L%)AND1: REM IAC - increment <L,AC>
             IF (C%AND4)  =  4 THEN A%=A%<<1:A%=A%+L%:L%=(A% AND &1000)>>12:A%=A% AND &FFF: REM RAL rotate <L,AC> left
             IF (C%AND8)  =  8 THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RAR rotate <L,AC> right
             IF (C%AND6)  =  6 THEN A%=A%<<1:A%=A%+L%:L%=(A% AND &1000)>>12:A%=A% AND &FFF: REM RTL rotate <L,AC> left twice
             IF (C%AND&A) = &A THEN A%=A%+L%*4096:L%=A% AND 1:A%=A%>>1: REM RTR rotate <L,AC> right twice
             IF (C%AND14) =  2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<6)+(temp%>>6):REM BSW (8e and up)
-          WHEN &F00:REM Group 2 (%1111xxxxxxxx), (OR|AND) group
-            cond%=FALSE
-            IF (C%AND&40)=&40THENIF A%>2047 cond%=TRUE: REM SMA - Skip on AC < 0 (or group)  | SPA – Skip on AC ≥ 0 (and group)
-            IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
-            IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
-            IF (C%AND&80)=&80THEN A%=0: REM CLA
-            IF (C%AND2)  =  2THEN ::PRINT'"CPU HALT"':PROCcommand::
-            IF (C%AND4)  =  4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
-            IF (C%AND8)=0 THEN
-              IF cond%=TRUE THEN P%=(P%+1)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
+          WHEN &F00: REM Groups 2 and 3 (%1111xxxxxxxx)
+            IF (C%AND1)=0 THEN
+              REM Group 2 (%1111xxxxxxx0), (OR|AND) group
+              cond%=FALSE
+              IF (C%AND&40)=&40THENIF A%>2047 cond%=TRUE: REM SMA - Skip on AC < 0 (or group)  | SPA – Skip on AC ≥ 0 (and group)
+              IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
+              IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
+              IF (C%AND&80)=&80THEN A%=0: REM CLA
+              IF (C%AND2)  =  2THEN PRINT'"CPU HALT"'"KINT=";kint%;" T%=";T%;" K%=";K%:PROCbell(150):PROCcommand
+              IF (C%AND4)  =  4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
+              IF (C%AND8)=0 THEN
+                IF cond%=TRUE THEN P%=(P%+1)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
+              ELSE
+                IF cond%=FALSE THEN P%=(P%+1)AND&FFF:REM Bit 8 set (AND), skip if all conditions true
+              ENDIF
             ELSE
-              IF cond%=FALSE THEN P%=(P%+1)AND&FFF:REM Bit 8 set (AND), skip if all conditions true
+              REM Group 3 (%1111xxxxxxx1); MQ instructions
+              IF (C%AND128)=128THENA%=0:REM Bit 5 set, CLA
+              IF (C%AND80)=64THENA%=A%ORQ%:REM Bit 6 set, MQA
+              IF (C%AND80)=16THENQ%=A%:A%=0:REM Bit 8 set, MQL
+              IF (C%AND80)=80THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 6 and 8 set, SWP
             ENDIF
-          WHEN &F01: REM Group 3 (%1111xxxxxxx1); MQ instructions
-            IF (C%AND128)=128THENA%=0:REM Bit 5 set, CLA
-            IF (C%AND80)=64THENA%=A%ORQ%:REM Bit 6 set, MQA
-            IF (C%AND80)=16THENQ%=A%:A%=0:REM Bit 8 set, MQL
-            IF (C%AND80)=80THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 6 and 8 set, SWP
         ENDCASE
         P%=(P%+1)AND&FFF
       ENDCASE
@@ -266,12 +279,13 @@
       IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND223)
       kbdbuf$=kbdbuf$+kbdtemp$
       ENDIF
-      IFLENkbdbuf$>0THENK%=TRUE ELSEK%=FALSE
+      IF(LENkbdbuf$>0)AND kint% THEN K%=TRUE ELSEK%=FALSE
       ENDPROC
       :
       DEFPROCtprinter
+      LOCALtemp%
       IFLENttybuf$>0THEN
-      IFASCttybuf$<127THENVDUASCttybuf$
+      temp%=(ASCttybuf$)AND&7F:VDUtemp%:IFtemp%=7THENPROCbell(200)
       ttybuf$="":T%=TRUE
       ENDIF
       ENDPROC
@@ -328,6 +342,7 @@
           WHEN 18:dis$="PCF"
           WHEN 20:dis$="PPC"
           WHEN 22:dis$="PLS"
+          WHEN 24: dis$="KCF"
           WHEN 25: dis$="KSF":REM Teletype keyboard/reader
           WHEN 26: dis$="KCC"
           WHEN 28: dis$="KRS"
@@ -470,4 +485,8 @@
         UNTIL c%>=0 AND c%<=7
         I%=c%<<12:insbuffer%=I%:REM second one is a test for problem when manually depositing IF
       ENDCASE
+      ENDPROC
+
+      DEFPROCbell(pitch%)
+      FORN%=-15TO0:SOUND1,N%,pitch%,2:SOUND2,N%,pitch%/1.125,2NEXT
       ENDPROC
