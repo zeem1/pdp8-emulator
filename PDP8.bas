@@ -2,12 +2,15 @@
       REM INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
-      COLOUR128:COLOUR7:CLS
+      VDU 23,22,720;524;10,21,2,8:REM Window size
+      VDU 19,1,2,0,0,0:REM Set foreground colour to green
+      COLOUR128:COLOUR1:CLS
 
       REM PROC_multiwin(1):REM Multiple window support, 1 window
       REM HWND%=FN_createwin(1,"Output",100,100,640,512,0,0,0)
       REM ::COLOUR128:COLOUR7:CLS
-      OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
+      REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
+      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       test%=OPENOUT(@dir$+"/trace.log")
       :
       REM ON ERROR PROC_closewin(1):END
@@ -56,7 +59,6 @@
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
         OTHERWISE:
-          REM file%=OPENIN(@dir$+"/dec-08-lbaa-pm_5-10-67.bin")
           PRINT "RIM loader is at 7756, BIN loader at 7777"
       ENDCASE
       PROCcommand:REM need to get start PC from user
@@ -65,17 +67,12 @@
       REM ** Main loop **
       REPEAT
         IF int_inhib%<0 THEN int_inhib%+=1:IF NOT int_inhib% THEN int%=TRUE
-        IF FNirqline AND int% AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
+        IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:REM for status
-        REM IF TIME>t%+10 THEN
-        PROCkbd:REM t%=TIME
+        IF TIME>t%+10 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
         PROCexecute
-        IF U% THEN
-          REM xt%=POS:yt%=VPOS
-          d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$
-          REM PRINTTAB(xt%,yt%);
-        ENDIF
+        IF U% THEN d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -101,48 +98,32 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      REM IF S% THEN ::PRINT "Depositing ";FNo0(word%,4);" into addr ";FNo0(address%,5): :
-      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
+      REM IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
-      REM IF S% THEN ::PRINT "Examining address ";FNo0(address%,5);", result ";FNo0(M%!(address%<<2),4): :
-      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
+      REM IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
       LOCAL addr%,temp%
-      C%=FNexamine(I%+P%)
-      CASE (C% AND &E00) OF
+      C%=FNexamine(I%+P%):CASE (C% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
-          A%=A% AND FNexamine(FNaddr(C%))
-          P%=(P%+1)AND&FFF
+          A%=A% AND FNexamine(FNaddr(C%)):P%=(P%+1)AND&FFF
         WHEN &200:  REM TAD - add operand to (a 13 bit value)
           A%=A%+FNexamine(FNaddr(C%))
-          IF A%>4095 THEN
-            A%=A%-4096
-            L%=(NOT L%)AND1
-          ENDIF
+          IF A%>4095 THEN A%=A%-4096:L%=(NOT L%)AND1
           P%=(P%+1)AND&FFF
         WHEN &400:  REM ISZ - increment operand and skip if result is zero
-          addr%=FNaddr(C%):temp%=(FNexamine(addr%)+1)AND&FFF
-          PROCdeposit(addr%,temp%)
-          IFtemp%=FALSE THENP%=(P%+1)AND&FFF
+          addr%=FNaddr(C%):temp%=(FNexamine(addr%)+1)AND&FFF:PROCdeposit(addr%,temp%):IFtemp%=FALSE THENP%=(P%+1)AND&FFF
           P%=(P%+1)AND&FFF
         WHEN &600:  REM DCA - deposit AC in memory and clear AC
-          PROCdeposit(FNaddr(C%),A%)
-          A%=0
-          P%=(P%+1)AND&FFF
+          PROCdeposit(FNaddr(C%),A%):A%=0:P%=(P%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
-          icontrol%=TRUE:REM re-enable interrupts via separate memory management control
-          I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          temp%=FNaddr_jump(C%)
-          PROCdeposit(I%+temp%,P%+1)
-          P%=temp%+1
+          REM re-enable interrupts via separate memory management control and transfer instruction field buffer to instruction field register
+          icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
         WHEN &A00:  REM JMP - jump
-          icontrol%=TRUE:REM re-enable interrupts via separate memory management control
-          I%=insbuffer%:REM memory control: transfer instruction field buffer to instruction field register
-          P%=FNaddr_jump(C%)
+          icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
         WHEN &C00:  REM IOT - input/output transfer
           PROCiot
         WHEN &E00:  REM OPR - microcoded operations
