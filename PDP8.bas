@@ -271,10 +271,10 @@
       DEFPROCbell(pitch%)
       LOCAL N%
       N%=-15:FORN%=-15TO0
-        SOUND1,N%,pitch%,10:REM SOUND2,N%,pitch%/1.125,5
+        SOUND1,N%,pitch%,2:SOUND2,N%,pitch%/1.125,2
       NEXT
       ENDPROC
 
       DEFFNirqline
       REM PRINT "FNinterrupt, K%=";K%;" T%=";T%;" kint%=";kint%
-      =(K% AND kint%) OR T%
+      =(K% OR T%) AND kint%
