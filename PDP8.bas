@@ -66,13 +66,12 @@
 
       REM ** Main loop **
       REPEAT
-        IF int_inhib%<0 THEN int_inhib%+=1:IF NOT int_inhib% THEN int%=TRUE
+        IF int_inhib%<0 THEN int_inhib%+=1:REM IF NOT int_inhib% THEN int%=TRUE
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
-        startpc%=P%:REM for status
+        startpc%=P%:PROCexecute:REM for status
         IF TIME>t%+10 THEN PROCkbd:t%=TIME
         IFINKEY(-114)THENPROCcommand
-        PROCexecute
-        IF U% THEN d$=FNstatus(startpc%):PRINTd$:PRINT#test%,d$
+        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
         IF S% THEN PROCpause
       UNTIL FALSE
       :
