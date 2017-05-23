@@ -61,15 +61,16 @@
         OTHERWISE:
           PRINT "RIM loader is at 7756, BIN loader at 7777"
       ENDCASE
-      PROCcommand:REM need to get start PC from user
+      C%=FNexamine(I%+P%):PROCcommand:REM need to get start PC from user
 
 
       REM ** Main loop **
       REPEAT
+        IF TIME>t%+10 THEN PROCkbd:t%=TIME
         IF int_inhib%<0 THEN int_inhib%+=1:REM IF NOT int_inhib% THEN int%=TRUE
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
-        IF TIME>t%+10 THEN PROCkbd:t%=TIME
+
         IFINKEY(-114)THENPROCcommand
         IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
         IF S% THEN PROCpause
@@ -166,14 +167,10 @@
       ENDPROC
       :
       DEFPROCkbd
-      LOCAL kbdtemp$
-      REM Keyboard
-      kbdtemp$=INKEY$(0)
-      IFkbdtemp$<>""THEN
+      LOCAL kbdtemp$:kbdtemp$=INKEY$(0):IFkbdtemp$<>""THEN
         IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND223)
-        kbdbuf$=kbdbuf$+kbdtemp$
+        kbdbuf$=kbdbuf$+kbdtemp$:K%=TRUE
       ENDIF
-      IF(LENkbdbuf$>0)AND kint% THEN K%=TRUE ELSEK%=FALSE
       ENDPROC
       :
       DEFPROCtprinter
@@ -273,11 +270,11 @@
 
       DEFPROCbell(pitch%)
       LOCAL N%
-      N%=-15:REM FORN%=-15TO0
-      REM SOUND1,N%,pitch%,10:REM SOUND2,N%,pitch%/1.125,5
-      REM NEXT
+      N%=-15:FORN%=-15TO0
+        SOUND1,N%,pitch%,10:REM SOUND2,N%,pitch%/1.125,5
+      NEXT
       ENDPROC
 
       DEFFNirqline
       REM PRINT "FNinterrupt, K%=";K%;" T%=";T%;" kint%=";kint%
-      =((K% OR T%) AND kint%)
+      =(K% AND kint%) OR T%
