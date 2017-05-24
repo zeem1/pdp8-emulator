@@ -2,6 +2,8 @@
       REM INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
+      INSTALL @dir$+"RK8E.bbc"
+
       VDU 23,22,720;524;10,21,2,8:REM Window size
       VDU 19,1,2,0,0,0:REM Set foreground colour to green
       COLOUR128:COLOUR1:CLS
@@ -27,9 +29,10 @@
       REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
       REM TTY/TAPE flags/buffers
       kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
-      t%=TIME
+      REM RK8E, testing
+      rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
 
-      S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      t%=TIME:S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
       REM Set up the RIM and BIN loaders in memory
       FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
@@ -40,6 +43,9 @@
       REM RIM Loader (begins at 7756)
       DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
 
+      REM The RK8E boot loader:
+      FOR c%=19 TO 26:READ d%:PROCdeposit(I%+c%,d%):NEXT
+      DATA3079,3556,538,3558,3555,538,2585,0
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
@@ -70,9 +76,8 @@
         IF int_inhib%<0 THEN int_inhib%+=1:REM IF NOT int_inhib% THEN int%=TRUE
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
-
         IFINKEY(-114)THENPROCcommand
-        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
+        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:PRINTd$
         IF S% THEN PROCpause
       UNTIL FALSE
       :
