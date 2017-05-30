@@ -10,7 +10,6 @@
 
       REM PROC_multiwin(1):REM Multiple window support, 1 window
       REM HWND%=FN_createwin(1,"Output",100,100,640,512,0,0,0)
-      REM ::COLOUR128:COLOUR7:CLS
       REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       test%=OPENOUT(@dir$+"/trace.log")
@@ -47,6 +46,9 @@
       FOR c%=19 TO 26:READ d%:PROCdeposit(I%+c%,d%):NEXT
       DATA3079,3556,538,3558,3555,538,2585,0
 
+      REM Open RK05 image, test:
+      rk_file%=OPENIN(@dir$+"/multos8.rk05")
+
       PRINT "PDP-8/e Emulator"
       PRINT "================"
       PRINT
@@ -65,7 +67,7 @@
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
         OTHERWISE:
-          PRINT "RIM loader is at 7756, BIN loader at 7777"
+          PRINT "RIM loader is at 7756, BIN loader at 7777, RK8E boot at 23"
       ENDCASE
       C%=FNexamine(I%+P%):PROCcommand:REM need to get start PC from user
 
@@ -103,11 +105,11 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      REM IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
+      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
       ENDPROC
       :
       DEFFNexamine(address%)
-      REM IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
+      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
