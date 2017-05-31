@@ -128,9 +128,11 @@
           PROCdeposit(FNaddr(C%),A%):A%=0:P%=(P%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
           REM re-enable interrupts via separate memory management control and transfer instruction field buffer to instruction field register
-          icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
+          REM icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
+          icontrol%=TRUE:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1:I%=insbuffer%
         WHEN &A00:  REM JMP - jump
-          icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
+          REM icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
+          icontrol%=TRUE:P%=FNaddr_jump(C%):I%=insbuffer%
         WHEN &C00:  REM IOT - input/output transfer
           PROCiot
         WHEN &E00:  REM OPR - microcoded operations
