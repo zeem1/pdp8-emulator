@@ -15,6 +15,7 @@
       test%=OPENOUT(@dir$+"/trace.log")
       :
       REM ON ERROR PROC_closewin(1):END
+      ON ERROR CLOSE#0:END
 
       REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
       REM S%=single-step enabled, U%=Status display enabled, K%=keyboard flag, T%=teleprinter flag
@@ -79,7 +80,7 @@
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
         IFINKEY(-114)THENPROCcommand
-        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:PRINTd$
+        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -105,11 +106,11 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
+      IF U% THEN PRINT #test%,"Depositing addr "+FNo0(address%,5)+" with value "+FNo0(word%,4)
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
+      IF U% THEN PRINT #test%,"Examining  addr "+FNo0(address%,5)+", result    "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
@@ -129,7 +130,7 @@
         WHEN &800:  REM JMS - jump to subroutine
           REM re-enable interrupts via separate memory management control and transfer instruction field buffer to instruction field register
           REM icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
-          icontrol%=TRUE:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1:I%=insbuffer%
+          icontrol%=TRUE:temp%=FNaddr_jump(C%):I%=insbuffer%:PROCdeposit(I%+temp%,P%+1):P%=temp%+1
         WHEN &A00:  REM JMP - jump
           REM icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
           icontrol%=TRUE:P%=FNaddr_jump(C%):I%=insbuffer%
