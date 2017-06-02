@@ -48,7 +48,7 @@
       DATA3079,3556,538,3558,3555,538,2585,0
 
       REM Open RK05 image, test:
-      rk_file%=OPENIN(@dir$+"/multos8.rk05")
+      rk_file%=OPENIN(@dir$+"/haygood-osv3r.rk05")
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
