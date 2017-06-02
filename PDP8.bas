@@ -2,18 +2,20 @@
       REM INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
-      VDU 23,22,720;524;10,21,2,8:REM Window size
+      INSTALL @dir$+"RK8E.bbc"
+
+      VDU 23,22,800;524;10,21,2,8:REM Window size
       VDU 19,1,2,0,0,0:REM Set foreground colour to green
       COLOUR128:COLOUR1:CLS
 
       REM PROC_multiwin(1):REM Multiple window support, 1 window
       REM HWND%=FN_createwin(1,"Output",100,100,640,512,0,0,0)
-      REM ::COLOUR128:COLOUR7:CLS
       REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       test%=OPENOUT(@dir$+"/trace.log")
       :
       REM ON ERROR PROC_closewin(1):END
+      ON ERROR CLOSE#0:END
 
       REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
       REM S%=single-step enabled, U%=Status display enabled, K%=keyboard flag, T%=teleprinter flag
@@ -27,9 +29,10 @@
       REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
       REM TTY/TAPE flags/buffers
       kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
-      t%=TIME
+      REM RK8E, testing
+      rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
 
-      S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      t%=TIME:S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
 
       REM Set up the RIM and BIN loaders in memory
       FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
@@ -40,6 +43,12 @@
       REM RIM Loader (begins at 7756)
       DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
 
+      REM The RK8E boot loader:
+      FOR c%=19 TO 26:READ d%:PROCdeposit(I%+c%,d%):NEXT
+      DATA3079,3556,538,3558,3555,538,2585,0
+
+      REM Open RK05 image, test:
+      rk_file%=OPENIN(@dir$+"/haygood-osv3r.rk05")
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
@@ -59,7 +68,7 @@
           UNTIL EOF#file%:REM CLOSE#file%:PRINT
           PRINT"LOADED "+F$+" IMAGE"
         OTHERWISE:
-          PRINT "RIM loader is at 7756, BIN loader at 7777"
+          PRINT "RIM loader is at 7756, BIN loader at 7777, RK8E boot at 23"
       ENDCASE
       C%=FNexamine(I%+P%):PROCcommand:REM need to get start PC from user
 
@@ -70,7 +79,6 @@
         IF int_inhib%<0 THEN int_inhib%+=1:REM IF NOT int_inhib% THEN int%=TRUE
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
-
         IFINKEY(-114)THENPROCcommand
         IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
         IF S% THEN PROCpause
@@ -98,11 +106,11 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      REM IF U% THEN PRINT #test%,"Depositing "+FNo0(word%,4)+" into addr "+FNo0(address%,5)
+      IF U% THEN PRINT #test%,"Depositing addr "+FNo0(address%,5)+" with value "+FNo0(word%,4)
       ENDPROC
       :
       DEFFNexamine(address%)
-      REM IF U% THEN PRINT #test%,"Examining address "+FNo0(address%,5)+", result "+FNo0(M%!(address%<<2),4)
+      IF U% THEN PRINT #test%,"Examining  addr "+FNo0(address%,5)+", result    "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
@@ -121,9 +129,11 @@
           PROCdeposit(FNaddr(C%),A%):A%=0:P%=(P%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
           REM re-enable interrupts via separate memory management control and transfer instruction field buffer to instruction field register
-          icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
+          REM icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
+          icontrol%=TRUE:temp%=FNaddr_jump(C%):I%=insbuffer%:PROCdeposit(I%+temp%,P%+1):P%=temp%+1
         WHEN &A00:  REM JMP - jump
-          icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
+          REM icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
+          icontrol%=TRUE:P%=FNaddr_jump(C%):I%=insbuffer%
         WHEN &C00:  REM IOT - input/output transfer
           PROCiot
         WHEN &E00:  REM OPR - microcoded operations
@@ -174,9 +184,15 @@
       ENDPROC
       :
       DEFPROCtprinter
-      LOCALtemp%
+      LOCALtemp%,pos%
       IFLENttybuf$>0THEN
-        temp%=(ASCttybuf$)AND&7F:VDUtemp%:IFtemp%=7THENPROCbell(200)
+        temp%=(ASCttybuf$)AND&7F
+        CASE temp% OF
+          WHEN12: temp%=0:REM Ignore form-feed (clear screen), this isn't a teleprinter
+          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:REM PRINT"***";(pos%);:REM Expand tabs to 8 chars
+          WHEN 7: PROCbell(200)
+          OTHERWISE: VDUtemp%
+        ENDCASE
         ttybuf$="":T%=TRUE
       ENDIF
       ENDPROC
