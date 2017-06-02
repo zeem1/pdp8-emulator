@@ -4,7 +4,7 @@
       INSTALL @dir$+"IOT.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
-      VDU 23,22,720;524;10,21,2,8:REM Window size
+      VDU 23,22,800;524;10,21,2,8:REM Window size
       VDU 19,1,2,0,0,0:REM Set foreground colour to green
       COLOUR128:COLOUR1:CLS
 
@@ -184,9 +184,15 @@
       ENDPROC
       :
       DEFPROCtprinter
-      LOCALtemp%
+      LOCALtemp%,pos%
       IFLENttybuf$>0THEN
-        temp%=(ASCttybuf$)AND&7F:VDUtemp%:IFtemp%=7THENPROCbell(200)
+        temp%=(ASCttybuf$)AND&7F
+        CASE temp% OF
+          WHEN12: temp%=0:REM Ignore form-feed (clear screen), this isn't a teleprinter
+          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:REM PRINT"***";(pos%);:REM Expand tabs to 8 chars
+          WHEN 7: PROCbell(200)
+          OTHERWISE: VDUtemp%
+        ENDCASE
         ttybuf$="":T%=TRUE
       ENDIF
       ENDPROC
