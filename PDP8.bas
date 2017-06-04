@@ -6,6 +6,7 @@
 
       VDU 23,22,800;524;10,21,2,8:REM Window size
       VDU 19,1,2,0,0,0:REM Set foreground colour to green
+      OSCLI"ESC OFF":REM ASCII 27 needed in emulator
       COLOUR128:COLOUR1:CLS
 
       REM PROC_multiwin(1):REM Multiple window support, 1 window
@@ -48,7 +49,8 @@
       DATA3079,3556,538,3558,3555,538,2585,0
 
       REM Open RK05 image, test:
-      rk_file%=OPENIN(@dir$+"/haygood-osv3r.rk05")
+      REM rk_file%=OPENIN(@dir$+"/haygood-osv3r.rk05")
+      rk_file%=OPENIN(@dir$+"/advent.rk05")
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
