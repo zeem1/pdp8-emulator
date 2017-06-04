@@ -14,9 +14,10 @@
       REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       test%=OPENOUT(@dir$+"/trace.log")
+      file%=0:REM Prevents failure when no tape image opened
       :
       REM ON ERROR PROC_closewin(1):END
-      ON ERROR CLOSE#0:END
+      REM ON ERROR REPORT:CLOSE#0:END
 
       REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
       REM S%=single-step enabled, U%=Status display enabled, K%=keyboard flag, T%=teleprinter flag
@@ -49,8 +50,8 @@
       DATA3079,3556,538,3558,3555,538,2585,0
 
       REM Open RK05 image, test:
-      REM rk_file%=OPENIN(@dir$+"/haygood-osv3r.rk05")
-      rk_file%=OPENIN(@dir$+"/advent.rk05")
+      REM rk_file%=OPENIN(@dir$+"/multos8.rk05")
+      rk_file%=OPENUP(@dir$+"/advent.rk05")
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
@@ -159,7 +160,7 @@
                 IF (C%AND&20)=&20THENIF A%=0 cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
                 IF (C%AND&10)=&10THENIF L%=1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
                 IF (C%AND&80)=&80THEN A%=0: REM CLA
-                IF (C%AND2)  =  2THEN PRINT'"CPU HALT"':PROCbell(150):PROCcommand
+                IF (C%AND2)  =  2THEN PRINT'"CPU HALT"':PROCcommand:REM Crashes on Toshiba - PROCbell(150)
                 IF (C%AND4)  =  4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
                 IF (C%AND8)=0 THEN
                   IF cond%=TRUE THEN P%=(P%+1)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
@@ -201,9 +202,11 @@
       :
       DEFPROCtape
       REM HS Tape
-      IF (NOT EOF#file%) THEN
-        IF hstflag%= FALSE THEN hstbuffer%=BGET#file%:hstflag%=TRUE
-      ELSE hstflag%=FALSE
+      IF file%<>0 THEN
+        IF (NOT EOF#file%) THEN
+          IF hstflag%= FALSE THEN hstbuffer%=BGET#file%:hstflag%=TRUE
+        ELSE hstflag%=FALSE
+        ENDIF
       ENDIF
       ENDPROC
       :
