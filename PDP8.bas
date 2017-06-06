@@ -1,5 +1,5 @@
       INSTALL @dir$+"/Number.bbc"
-      REM INSTALL @lib$+"/multiwin.bbc"
+      INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
       INSTALL @dir$+"RK8E.bbc"
@@ -7,34 +7,43 @@
       VDU 23,22,800;524;10,21,2,8:REM Window size
       VDU 19,1,2,0,0,0:REM Set foreground colour to green
       OSCLI"ESC OFF":REM ASCII 27 needed in emulator
+      REM  OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       COLOUR128:COLOUR1:CLS
 
-      REM PROC_multiwin(1):REM Multiple window support, 1 window
-      REM HWND%=FN_createwin(1,"Output",100,100,640,512,0,0,0)
-      REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 10"
-      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
-      test%=OPENOUT(@dir$+"/trace.log")
-      file%=0:REM Prevents failure when no tape image opened
+      PROC_multiwin(1):REM Multiple window support, 1 window
+      HWND%=FN_createwin(1,"Debug window",100,100,640,512,0,0,0)
+      PROC_selectwin(1):VDU 23,22,640;256;8,16,2,8:REM Window size
+      REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 12"
+      PROC_selectwin(0)
+
+      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15":REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 8"
+      REM PROC_selectwin(0)
+
+      trace%=OPENOUT(@dir$+"/trace.log")
+      file%=0:rk_file%=0:REM Prevents failure when no tape or disk image opened
       :
-      REM ON ERROR PROC_closewin(1):END
-      REM ON ERROR REPORT:CLOSE#0:END
+      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
-      REM S%=single-step enabled, U%=Status display enabled, K%=keyboard flag, T%=teleprinter flag
-      :
-      REM Init machine
+      REM K%=keyboard flag, T%=teleprinter flag
+      REM S%=single-step enabled, U%=Status display enabled, TS%=Trace to screen enabled
 
       REM PC for FOCAL69 or memory test (0200), should be &FEE for RIM load. SR is 3777 for BIN load from HST:
       DIM M% 131071:P%=128:A%=0:L%=0:Q%=0:sr%=&7FF:int%=FALSE:int_inhib%=FALSE
       REM Memory control
       I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
       REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
+
       REM TTY/TAPE flags/buffers
       kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
-      REM RK8E, testing
+      OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
+
+      REM RK8E
       rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
 
-      t%=TIME:S%=FALSE:U%=FALSE:REM PROCopen_status:REM temp - to allow single-step and status enable at beginning
+      REM Debugging options
+      S%=FALSE:U%=FALSE:TS%=TRUE:REM S%=single-step, U%=trace to file, TS%=trace to screen
 
       REM Set up the RIM and BIN loaders in memory
       FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
@@ -49,41 +58,26 @@
       FOR c%=19 TO 26:READ d%:PROCdeposit(I%+c%,d%):NEXT
       DATA3079,3556,538,3558,3555,538,2585,0
 
-      REM Open RK05 image, test:
-      REM rk_file%=OPENIN(@dir$+"/multos8.rk05")
-      rk_file%=OPENUP(@dir$+"/advent.rk05")
+
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
-      PRINT
-      INPUT"Core image load (Y/N)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
-      CASE c$ OF
-        WHEN "Y":
-          OSCLI"DIR "+@dir$:OSCLI". *.CORE"
-          INPUT"IMAGE FILE NAME",F$
-          file%=OPENIN(@dir$+"/"+F$)
-          address%=I%
-          REPEAT
-            byte1%=BGET#file%:IFbyte1%=&0ATHENbyte1%=BGET#file%
-            byte2%=BGET#file%
-            PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
-            address%+=1
-          UNTIL EOF#file%:REM CLOSE#file%:PRINT
-          PRINT"LOADED "+F$+" IMAGE"
-        OTHERWISE:
-          PRINT "RIM loader is at 7756, BIN loader at 7777, RK8E boot at 23"
-      ENDCASE
-      C%=FNexamine(I%+P%):PROCcommand:REM need to get start PC from user
-
+      PRINT '"RIM loader is at 7756, BIN loader at 7777, RK8E boot at 23"'
+      REM C%=FNexamine(I%+P%):PROCcommand:REM User needs to set the machine up
 
       REM ** Main loop **
       REPEAT
-        IF TIME>t%+10 THEN PROCkbd:t%=TIME
-        IF int_inhib%<0 THEN int_inhib%+=1:REM IF NOT int_inhib% THEN int%=TRUE
+        IFINKEY(-114)THENPROCcommand
+        IF int_inhib%<0 THEN int_inhib%+=1
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
-        IFINKEY(-114)THENPROCcommand
-        IF U% THEN d$=FNstatus(startpc%):PRINT#test%,d$:REM PRINTd$
+        IF U% OR TS% THEN
+          d$=FNstatus(startpc%)
+          IF U% THEN PRINT#trace%,d$
+          IF TS% THEN
+            PROC_selectwin(1):PRINTd$:PROC_selectwin(0)
+          ENDIF
+        ENDIF
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -109,15 +103,15 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      IF U% THEN PRINT #test%,"Depositing addr "+FNo0(address%,5)+" with value "+FNo0(word%,4)
+      IF U% THEN PRINT #trace%,"DEP "+FNo0(address%,5)+"<-"+FNo0(word%,4)
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF U% THEN PRINT #test%,"Examining  addr "+FNo0(address%,5)+", result    "+FNo0(M%!(address%<<2),4)
+      IF U% THEN PRINT #trace%,"EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFPROCexecute
-      LOCAL addr%,temp%
+      LOCAL addr%,temp%,cond%
       C%=FNexamine(I%+P%):CASE (C% AND &E00) OF
         WHEN 0:     REM AND - and operand with AC
           A%=A% AND FNexamine(FNaddr(C%)):P%=(P%+1)AND&FFF
@@ -180,7 +174,8 @@
       ENDPROC
       :
       DEFPROCkbd
-      LOCAL kbdtemp$:kbdtemp$=INKEY$(0):IFkbdtemp$<>""THEN
+      LOCAL kbdtemp$
+      kbdtemp$=INKEY$(0):IFkbdtemp$<>""THEN
         IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND223)
         kbdbuf$=kbdbuf$+kbdtemp$:K%=TRUE
       ENDIF
@@ -192,7 +187,7 @@
         temp%=(ASCttybuf$)AND&7F
         CASE temp% OF
           WHEN12: temp%=0:REM Ignore form-feed (clear screen), this isn't a teleprinter
-          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:REM PRINT"***";(pos%);:REM Expand tabs to 8 chars
+          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:REM Expand tabs to 8 chars
           WHEN 7: PROCbell(200)
           OTHERWISE: VDUtemp%
         ENDCASE
@@ -215,79 +210,125 @@
       ENDPROC
       :
       DEFPROCcommand
-      LOCALc$,p%:PRINTFNstatus(P%):REM S%=TRUE:REM *********** TEST *****************
+      LOCALc$,p%:PRINTFNstatus(P%)
       PRINT "Stopped. ";
       REPEAT
-        OSCLI"FX15,1":INPUT"COMMAND:"'"(E)xamine/(D)eposit/(C)ont/(P)C/(T)ape/(S)ingle-step/Save core (I)mage/Stat(u)s Display",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+        OSCLI"FX15,1":INPUT"COMMAND:"'"(C)ont/(E)xamine/(D)eposit/(F)ile/De(b)ug/(Q)uit",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
         CASE c$ OF
-          WHEN "S":
-            S%=NOT S%
-          WHEN "U":
-            U%=NOT U%
-            REM IF U%=TRUE THEN
-            REM PROCopen_status
-            REM ELSE
-            REM PROC_closewin(1)
-            REM ENDIF
           WHEN "E":
-            INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(I%+FNo2d(p%),5);" = ";FNo0(M%!((I%+FNo2d(p%))<<2),4)
-          WHEN "P":
-            INPUT"PC";p%:P%=FNo2d(p%)AND&FFF
+            INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(FNo2d(p%),5);" = ";FNo0(M%!((FNo2d(p%))<<2),4)
           WHEN "D":
             PROCmanual_deposit
-          WHEN "T":
-            PROCchangetape
-          WHEN "I":
-            PROCsavecore
+          WHEN "F":
+            PROCfile
+          WHEN "B":
+            PROCdebug
+          WHEN "Q":
+            QUIT
         ENDCASE
       UNTILc$="C"
       ENDPROC
       :
-      DEFPROCchangetape
-      LOCALF$
-      CLOSE #0: REM CLOSE#file%
-      OSCLI"DIR "+@dir$:OSCLI". *.BIN"
-      INPUT"TAPE FILE NAME",F$
-      file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED "+F$+" TAPE"
+      DEFPROCfile
+      LOCALF$,c$
+      CLOSE #0
+      INPUT"(T)ape/(D)isk/(C)ore image",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "T":
+          OSCLI"DIR "+@dir$:OSCLI". *.BIN"
+          INPUT"TAPE FILE NAME",F$
+          file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED "+F$+" TAPE"
+        WHEN"D":
+          OSCLI"DIR "+@dir$:OSCLI". *.RK05"
+          INPUT"RK05 FILE NAME",F$
+          rk_file%=OPENUP(@dir$+"/"+F$)
+          PRINT"LOADED "+F$+" DISK IMAGE"
+        WHEN"C":
+          PROCcore_image
+      ENDCASE
       ENDPROC
 
-      DEFPROCsavecore
+      DEFPROCcore_image
       LOCAL F$,count%,n%,l%,file%,word%
-      OSCLI"DIR "+@dir$:OSCLI". *.CORE"
-      INPUT"IMAGE FILE NAME TO SAVE",F$
-      INPUT"NUMBER OF WORDS",count%
-      file%=OPENOUT(@dir$+"/"+F$)
-      FORn%=0TOcount%-1
-        word%=FNexamine(n%)
-        BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND&3F)+33
-        IF n%MOD64=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
-      NEXT:CLOSE#file%
-      PRINT"SAVED "+F$+" IMAGE"
+      INPUT"(L)oad/(S)ave",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "S":
+          OSCLI"DIR "+@dir$:OSCLI". *.CORE"
+          INPUT"IMAGE FILE NAME TO SAVE",F$
+          INPUT"NUMBER OF WORDS",count%
+          file%=OPENOUT(@dir$+"/"+F$)
+          FORn%=0TOcount%-1
+            word%=FNexamine(n%)
+            BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND&3F)+33
+            IF (n%MOD64)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
+          NEXT:CLOSE#file%
+          PRINT"SAVED "+F$+" IMAGE"
+        WHEN "L":
+          OSCLI"DIR "+@dir$:OSCLI". *.CORE"
+          INPUT"IMAGE FILE NAME",F$
+          file%=OPENIN(@dir$+"/"+F$)
+          address%=I%
+          REPEAT
+            byte1%=BGET#file%:IFbyte1%=&0ATHENbyte1%=BGET#file%
+            byte2%=BGET#file%
+            PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
+            address%+=1
+          UNTIL EOF#file%
+          PRINT"LOADED "+F$+" IMAGE"
+      ENDCASE
       ENDPROC
 
       DEFPROCmanual_deposit
-      LOCALc$,c%
-      INPUT "(A)C, (M)EMORY, (S)WITCH REG, (D)ATA FIELD, (I)NSTR FIELD",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      LOCALc$,c%,p%
+      INPUT "(P)C, (A)C, (M)EMORY, (S)WITCH REG, (D)ATA FIELD, (I)NSTR FIELD, M(Q)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
+        WHEN "P":
+          INPUT"PC";p%:P%=FNo2d(p%)AND&FFF
         WHEN "A":
+          INPUT"AC";p%:A%=FNo2d(p%)AND&FFF
+        WHEN "Q":
+          INPUT"MQ";p%:Q%=FNo2d(p%)AND&FFF
         WHEN "M":
+          INPUT"LOCATION";p%:p%=FNo2d(p%)AND&7FFF
+          REPEAT
+            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
+          UNTIL VAL(LEFT$(STR$c%,1))>=0 AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=0 AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=0 AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=0 AND VAL(RIGHT$(STR$c%,1))<=7
+          M!(p%<<2)=c%
         WHEN "S":
           REPEAT
-            PRINT "Current switch register is ";FNo0(sr%,4):INPUT "Enter New Octal Value (0-7777):"c%
+            PRINT "CURRENT SR IS ";FNo0(sr%,4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
           UNTIL VAL(LEFT$(STR$c%,1))>=0 AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=0 AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=0 AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=0 AND VAL(RIGHT$(STR$c%,1))<=7
           sr%=FNo2d(c%)
         WHEN "D":
           REPEAT
-            PRINT "Current data field is ";D%>>12:INPUT "Enter New Field (0-7):"c%
+            PRINT "CURRENT DF IS ";D%>>12:INPUT "ENTER NEW DF (0-7):"c%
           UNTIL c%>=0 AND c%<=7
           D%=c%<<12
         WHEN "I":
           REPEAT
-            PRINT "Current instruction field is ";I%>>12:INPUT "Enter New Field (0-7):"c%
+            PRINT "CURRENT IF IS ";I%>>12:INPUT "ENTER NEW IF (0-7):"c%
           UNTIL c%>=0 AND c%<=7
           I%=c%<<12:insbuffer%=I%:REM second one is a test for problem when manually depositing IF
       ENDCASE
       ENDPROC
+
+      DEFPROCdebug
+      LOCALc$
+      INPUT"Trace to (F)ile/(T)race to screen/(S)ingle-step",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "F":
+          U%=NOTU%
+          PRINT "TRACE TO FILE TURNED ";:IF U% THEN PRINT "ON" ELSE PRINT "OFF"
+        WHEN "T":
+          TS%=NOTTS%
+          PRINT "TRACE TO SCREEN TURNED ";:IF TS% THEN PRINT "ON" ELSE PRINT "OFF"
+        WHEN "S":
+          S%=NOTS%
+          IF S% THEN TS%=TRUE:REM Enable on-screen debug when single-step turned on
+          PRINT "SINGLE-STEP TURNED ";:IF S% THEN PRINT "ON" ELSE PRINT "OFF"
+      ENDCASE
+      ENDPROC
+
 
       DEFPROCbell(pitch%)
       LOCAL N%
