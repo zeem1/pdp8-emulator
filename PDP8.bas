@@ -5,19 +5,17 @@
       INSTALL @dir$+"RK8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window size
-      VDU 19,1,2,0,0,0:REM Set foreground colour to green
+
       OSCLI"ESC OFF":REM ASCII 27 needed in emulator
-      REM  OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
       COLOUR128:COLOUR1:CLS
 
       PROC_multiwin(1):REM Multiple window support, 1 window
       HWND%=FN_createwin(1,"Debug window",100,100,640,512,0,0,0)
       PROC_selectwin(1):VDU 23,22,640;256;8,16,2,8:REM Window size
       REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 12"
-      PROC_selectwin(0)
+      PROC_selectwin(0):VDU 19,1,2,0,0,0:REM Set foreground colour to green
+      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
 
-      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15":REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 8"
-      REM PROC_selectwin(0)
 
       trace%=OPENOUT(@dir$+"/trace.log")
       file%=0:rk_file%=0:REM Prevents failure when no tape or disk image opened
@@ -29,42 +27,19 @@
       REM K%=keyboard flag, T%=teleprinter flag
       REM S%=single-step enabled, U%=Status display enabled, TS%=Trace to screen enabled
 
-      REM PC for FOCAL69 or memory test (0200), should be &FEE for RIM load. SR is 3777 for BIN load from HST:
-      DIM M% 131071:P%=128:A%=0:L%=0:Q%=0:sr%=&7FF:int%=FALSE:int_inhib%=FALSE
-      REM Memory control
-      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
-      REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
-
-      REM TTY/TAPE flags/buffers
-      kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
+      DIM M% 131071
       OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
-
-      REM RK8E
-      rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
 
       REM Debugging options
       S%=FALSE:U%=FALSE:TS%=TRUE:REM S%=single-step, U%=trace to file, TS%=trace to screen
 
-      REM Set up the RIM and BIN loaders in memory
-      FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(I%+c%,d%):NEXT
-      PROCdeposit(I%+4095,2753):REM JMP 7701 at location 7777
-      REM BIN Loader (first byte at 7627, enter at 7701, 7777 if not overwritten by RIM loader)
-      DATA 1674,2224,704,4072,2719,1162,3616,2711,650,4000,2712,652,188,737,3912,1174,4072,2966,652,174,687,1675,2712,56,3201,0,0,3097,2738,3102,1676,652,2992,3081,2744,3086
-      DATA 2741,192,2275,3617,653,3842,3098,3084,3212,687,1675,3972,4032,747,746,1713,2198,2763,1677,651,1758,652,1790,2224,1773,2198,2749,2275,3856,2782,1678,766,749,653,2765,0,1934,1166,3968,2778,0,766,3654,3590,3590,749,3043,2738,6,0,0
-      REM RIM Loader (begins at 7756)
-      DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
-
-      REM The RK8E boot loader:
-      FOR c%=19 TO 26:READ d%:PROCdeposit(I%+c%,d%):NEXT
-      DATA3079,3556,538,3558,3555,538,2585,0
-
-
+      PROCinit
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
       PRINT '"RIM loader is at 7756, BIN loader at 7777, RK8E boot at 23"'
-      REM C%=FNexamine(I%+P%):PROCcommand:REM User needs to set the machine up
-
+      C%=FNexamine(I%+P%):PROCcommand:REM User needs to set the machine up
+      :
       REM ** Main loop **
       REPEAT
         IFINKEY(-114)THENPROCcommand
@@ -90,7 +65,7 @@
         IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
         =D%+FNexamine(I%+temp%)
       ENDIF
-
+      :
       DEFFNaddr_jump(eff_M%)
       LOCAL temp%
       IF (eff_M%AND&100) = 0 THEN
@@ -109,6 +84,10 @@
       DEFFNexamine(address%)
       IF U% THEN PRINT #trace%,"EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
+      :
+      DEFFNirqline
+      REM PRINT "FNinterrupt, K%=";K%;" T%=";T%;" kint%=";kint%
+      =(K% OR T%) AND kint%
       :
       DEFPROCexecute
       LOCAL addr%,temp%,cond%
@@ -224,7 +203,7 @@
           WHEN "B":
             PROCdebug
           WHEN "Q":
-            QUIT
+            PROCquit
         ENDCASE
       UNTILc$="C"
       ENDPROC
@@ -337,6 +316,44 @@
       NEXT
       ENDPROC
 
-      DEFFNirqline
-      REM PRINT "FNinterrupt, K%=";K%;" T%=";T%;" kint%=";kint%
-      =(K% OR T%) AND kint%
+
+      DEFPROCinit
+      REM PC for FOCAL69 or memory test (0200), should be &FEE for RIM load. SR is 3777 for BIN load from HST
+      REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
+      P%=128:A%=0:L%=0:Q%=0:sr%=&7FF:int%=FALSE:int_inhib%=FALSE
+      REM Memory control
+      I%=0:D%=0:insbuffer%=0:intbuffer%=0:icontrol%=TRUE
+      REM TTY/TAPE flags/buffers
+      kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=0
+      REM RK8E
+      rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
+
+      REM Set up the RIM and BIN loaders in memory
+      RESTORE
+      FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
+      PROCdeposit(4095,2753):REM JMP 7701 at location 7777
+      REM BIN Loader (first byte at 7627, enter at 7701, 7777 if not overwritten by RIM loader)
+      DATA 1674,2224,704,4072,2719,1162,3616,2711,650,4000,2712,652,188,737,3912,1174,4072,2966,652,174,687,1675,2712,56,3201,0,0,3097,2738,3102,1676,652,2992,3081,2744,3086
+      DATA 2741,192,2275,3617,653,3842,3098,3084,3212,687,1675,3972,4032,747,746,1713,2198,2763,1677,651,1758,652,1790,2224,1773,2198,2749,2275,3856,2782,1678,766,749,653,2765,0,1934,1166,3968,2778,0,766,3654,3590,3590,749,3043,2738,6,0,0
+      REM RIM Loader (begins at 7756)
+      DATA &C0C,&C09,&AEF,&C0E,&E46,&E06,&F48,&AEF,&E06,&C09,&AF7,&C0E,&F10,&7FE,&6FE,&AEF,0,0
+
+      REM The RK8E boot loader:
+      FOR c%=19 TO 26:READ d%:PROCdeposit(c%,d%):NEXT
+      DATA3079,3556,538,3558,3555,538,2585,0
+
+      ENDPROC
+
+      DEFPROCquit
+      LOCALc$,c%
+      INPUT"(R)estart or (Q)uit",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "R":
+          FORc%=0TO131072:M%!c%=0:NEXT
+          PROCinit
+        WHEN "Q":
+          QUIT
+      ENDCASE
+      ENDPROC
+
+
