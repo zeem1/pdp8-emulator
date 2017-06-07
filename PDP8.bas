@@ -4,7 +4,7 @@
       INSTALL @dir$+"IOT.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
-      VDU 23,22,800;524;10,21,2,8:REM Window size
+      VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
 
       OSCLI"ESC OFF":REM ASCII 27 needed in emulator
       COLOUR128:COLOUR1:CLS
@@ -16,22 +16,18 @@
       PROC_selectwin(0):VDU 19,1,2,0,0,0:REM Set foreground colour to green
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
 
-
-      trace%=OPENOUT(@dir$+"/trace.log")
+      CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log")
       file%=0:rk_file%=0:REM Prevents failure when no tape or disk image opened
       :
-      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
       REM K%=keyboard flag, T%=teleprinter flag
-      REM S%=single-step enabled, U%=Status display enabled, TS%=Trace to screen enabled
+      REM S%=single-step enabled, TF%=Status display enabled, TS%=Trace to screen enabled
 
       DIM M% 131071
       OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
-
-      REM Debugging options
-      S%=FALSE:U%=FALSE:TS%=TRUE:REM S%=single-step, U%=trace to file, TS%=trace to screen
 
       PROCinit
 
@@ -46,9 +42,9 @@
         IF int_inhib%<0 THEN int_inhib%+=1
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
         startpc%=P%:PROCexecute:REM for status
-        IF U% OR TS% THEN
+        IF TF% OR TS% THEN
           d$=FNstatus(startpc%)
-          IF U% THEN PRINT#trace%,d$
+          IF TF% THEN PRINT#trace%,d$
           IF TS% THEN
             PROC_selectwin(1):PRINTd$:PROC_selectwin(0)
           ENDIF
@@ -78,11 +74,11 @@
       :
       DEFPROCdeposit(address%,word%)
       M%!(address%<<2)=word%
-      IF U% THEN PRINT #trace%,"DEP "+FNo0(address%,5)+"<-"+FNo0(word%,4)
+
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF U% THEN PRINT #trace%,"EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4)
+      IF TF% THEN PRINT #trace%,"EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4)
       =M%!(address%<<2)
       :
       DEFFNirqline
@@ -210,18 +206,20 @@
       :
       DEFPROCfile
       LOCALF$,c$
-      CLOSE #0
       INPUT"(T)ape/(D)isk/(C)ore image",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "T":
           OSCLI"DIR "+@dir$:OSCLI". *.BIN"
           INPUT"TAPE FILE NAME",F$
-          file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE:PRINT"LOADED "+F$+" TAPE"
+          IF file%<>0 THEN CLOSE#file%
+          file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE
+          IF file%<>0 THEN PRINT"LOADED "+F$+" TAPE" ELSE PRINT "COULD NOT LOAD "+F$
         WHEN"D":
           OSCLI"DIR "+@dir$:OSCLI". *.RK05"
           INPUT"RK05 FILE NAME",F$
+          IF rk_file%<>0 THEN CLOSE#rk_file%
           rk_file%=OPENUP(@dir$+"/"+F$)
-          PRINT"LOADED "+F$+" DISK IMAGE"
+          IF rk_file%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE" ELSE PRINT "COULD NOT LOAD "+F$
         WHEN"C":
           PROCcore_image
       ENDCASE
@@ -236,24 +234,32 @@
           INPUT"IMAGE FILE NAME TO SAVE",F$
           INPUT"NUMBER OF WORDS",count%
           file%=OPENOUT(@dir$+"/"+F$)
-          FORn%=0TOcount%-1
-            word%=FNexamine(n%)
-            BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND&3F)+33
-            IF (n%MOD64)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
-          NEXT:CLOSE#file%
-          PRINT"SAVED "+F$+" IMAGE"
+          IF file%<>0 THEN
+            FORn%=0TOcount%-1
+              word%=FNexamine(n%)
+              BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND&3F)+33
+              IF (n%MOD64)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
+            NEXT:CLOSE#file%
+            PRINT"SAVED "+F$+" IMAGE"
+          ELSE
+            PRINT"COULD NOT SAVE "+F$
+          ENDIF
         WHEN "L":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME",F$
           file%=OPENIN(@dir$+"/"+F$)
-          address%=I%
-          REPEAT
-            byte1%=BGET#file%:IFbyte1%=&0ATHENbyte1%=BGET#file%
-            byte2%=BGET#file%
-            PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
-            address%+=1
-          UNTIL EOF#file%
-          PRINT"LOADED "+F$+" IMAGE"
+          IF file%<>0 THEN
+            address%=I%
+            REPEAT
+              byte1%=BGET#file%:IFbyte1%=&0ATHENbyte1%=BGET#file%
+              byte2%=BGET#file%
+              PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
+              address%+=1
+            UNTIL EOF#file%
+            PRINT"LOADED "+F$+" IMAGE"
+          ELSE
+            PRINT"COULD NOT LOAD "+F$
+          ENDIF
       ENDCASE
       ENDPROC
 
@@ -296,8 +302,8 @@
       INPUT"Trace to (F)ile/(T)race to screen/(S)ingle-step",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "F":
-          U%=NOTU%
-          PRINT "TRACE TO FILE TURNED ";:IF U% THEN PRINT "ON" ELSE PRINT "OFF"
+          TF%=NOTTF%
+          PRINT "TRACE TO FILE TURNED ";:IF TF% THEN PRINT "ON" ELSE PRINT "OFF"
         WHEN "T":
           TS%=NOTTS%
           PRINT "TRACE TO SCREEN TURNED ";:IF TS% THEN PRINT "ON" ELSE PRINT "OFF"
@@ -308,14 +314,12 @@
       ENDCASE
       ENDPROC
 
-
       DEFPROCbell(pitch%)
       LOCAL N%
       N%=-15:FORN%=-15TO0
         SOUND1,N%,pitch%,2:SOUND2,N%,pitch%/1.125,2
       NEXT
       ENDPROC
-
 
       DEFPROCinit
       REM PC for FOCAL69 or memory test (0200), should be &FEE for RIM load. SR is 3777 for BIN load from HST
@@ -341,6 +345,9 @@
       REM The RK8E boot loader:
       FOR c%=19 TO 26:READ d%:PROCdeposit(c%,d%):NEXT
       DATA3079,3556,538,3558,3555,538,2585,0
+
+      REM Debugging options
+      S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
 
       ENDPROC
 
