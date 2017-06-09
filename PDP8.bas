@@ -44,7 +44,7 @@
         startpc%=P%:PROCexecute:REM for status
         IF TF% OR TS% THEN
           d$=FNstatus(startpc%)
-          IF TF% THEN PRINT#trace%,d$
+          IF TF% THEN PROCtrace_file(d$)
           IF TS% THEN
             PROC_selectwin(1):PRINTd$:PROC_selectwin(0)
           ENDIF
@@ -78,7 +78,7 @@
       ENDPROC
       :
       DEFFNexamine(address%)
-      IF TF% THEN PRINT #trace%,"EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4)
+      IF TF% THEN PROCtrace_file("EXA "+FNo0(address%,5)+"= "+FNo0(M%!(address%<<2),4) )
       =M%!(address%<<2)
       :
       DEFFNirqline
@@ -350,6 +350,8 @@
       S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
 
       ENDPROC
+
+      DEFPROCtrace_file(t$):PRINT#trace%,t$:BPUT#trace%,10:ENDPROC
 
       DEFPROCquit
       LOCALc$,c%
