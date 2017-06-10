@@ -16,7 +16,7 @@
       PROC_selectwin(0):VDU 19,1,2,0,0,0:REM Set foreground colour to green
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
 
-      CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log")
+      CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=0:rk_file%=0:REM Prevents failure when no tape or disk image opened
       :
       REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
@@ -73,6 +73,7 @@
       ENDIF
       :
       DEFPROCdeposit(address%,word%)
+      IF TF% THEN PROCtrace_file("DEP "+FNo0(address%,5)+"<-"+FNo0(word%,4) )
       M%!(address%<<2)=word%
 
       ENDPROC
@@ -162,9 +163,9 @@
         temp%=(ASCttybuf$)AND&7F
         CASE temp% OF
           WHEN12: temp%=0:REM Ignore form-feed (clear screen), this isn't a teleprinter
-          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:REM Expand tabs to 8 chars
+          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:REM Expand tabs to 8 chars
           WHEN 7: PROCbell(200)
-          OTHERWISE: VDUtemp%
+          OTHERWISE: VDUtemp%:BPUT#screen%,temp%
         ENDCASE
         ttybuf$="":T%=TRUE
       ENDIF
@@ -332,6 +333,9 @@
       REM RK8E
       rk_ca%=0:rk_com%=0:rk_da%=0:rk_st%=0:REM Curr addr, command, disk addr, status registers
 
+      REM Debugging options
+      S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
+
       REM Set up the RIM and BIN loaders in memory
       RESTORE
       FOR c%=&F97 TO &FFF:READ d%:PROCdeposit(c%,d%):NEXT
@@ -345,9 +349,6 @@
       REM The RK8E boot loader:
       FOR c%=19 TO 26:READ d%:PROCdeposit(c%,d%):NEXT
       DATA3079,3556,538,3558,3555,538,2585,0
-
-      REM Debugging options
-      S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
 
       ENDPROC
 
