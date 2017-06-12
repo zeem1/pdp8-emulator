@@ -62,15 +62,15 @@
         =D%+FNexamine(I%+temp%)
       ENDIF
       :
-      DEFFNaddr_jump(eff_M%)
-      LOCAL temp%
-      IF (eff_M%AND&100) = 0 THEN
-        =(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
-      ELSE
-        temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
-        =FNexamine(I%+temp%)
-      ENDIF
+      REM DEFFNaddr_jump(eff_M%)
+      REM LOCAL temp%
+      REM IF (eff_M%AND&100) = 0 THEN
+      REM =(((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)):REM direct
+      REM ELSE
+      REM temp%=((eff_M% AND &80) >>7)*(P% AND &F80) + (eff_M% AND &7F)
+      REM IF temp%>7 AND temp%<16 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)+1)AND&FFF)
+      REM =FNexamine(I%+temp%)
+      REM ENDIF
       :
       DEFPROCdeposit(address%,word%)
       IF TF% THEN PROCtrace_file("DEP "+FNo0(address%,5)+"<-"+FNo0(word%,4) )
@@ -102,11 +102,9 @@
           PROCdeposit(FNaddr(C%),A%):A%=0:P%=(P%+1)AND&FFF
         WHEN &800:  REM JMS - jump to subroutine
           REM re-enable interrupts via separate memory management control and transfer instruction field buffer to instruction field register
-          REM icontrol%=TRUE:I%=insbuffer%:temp%=FNaddr_jump(C%):PROCdeposit(I%+temp%,P%+1):P%=temp%+1
-          icontrol%=TRUE:temp%=FNaddr_jump(C%):I%=insbuffer%:PROCdeposit(I%+temp%,P%+1):P%=temp%+1
+          icontrol%=TRUE:temp%=FNaddr(C%)AND&FFF:I%=insbuffer%:PROCdeposit(I%+temp%,P%+1):P%=temp%+1
         WHEN &A00:  REM JMP - jump
-          REM icontrol%=TRUE:I%=insbuffer%:P%=FNaddr_jump(C%)
-          icontrol%=TRUE:P%=FNaddr_jump(C%):I%=insbuffer%
+          icontrol%=TRUE:P%=FNaddr(C%)AND&FFF:I%=insbuffer%
         WHEN &C00:  REM IOT - input/output transfer
           PROCiot
         WHEN &E00:  REM OPR - microcoded operations
@@ -166,6 +164,7 @@
           WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:
             REM Expand tabs to 8 chars
           WHEN 7: PROCbell(200)
+          WHEN 0: REM suppress output of ASCII 0 to text output file
           OTHERWISE: VDUtemp%:BPUT#screen%,temp%
         ENDCASE
         ttybuf$="":T%=TRUE:PTR#screen%=PTR#screen%:REM flush buffer
