@@ -39,8 +39,8 @@
       REM ** Main loop **
       REPEAT
         IFINKEY(-114)THENPROCcommand
-        IF int_inhib%<0 THEN int_inhib%+=1
         IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
+        IF int_inhib%<0 THEN int_inhib%+=1
         startpc%=P%:PROCexecute:REM for status
         IF TF% OR TS% THEN
           d$=FNstatus(startpc%)
