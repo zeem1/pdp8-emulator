@@ -22,9 +22,7 @@
       REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
-      REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
-      REM K%=keyboard flag, T%=teleprinter flag
-      REM S%=single-step enabled, TF%=Status display enabled, TS%=Trace to screen enabled
+
 
       DIM M% 131071
       OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
@@ -39,7 +37,10 @@
       REM ** Main loop **
       REPEAT
         IFINKEY(-114)THENPROCcommand
-        IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:D%=0:P%=1
+        IF int% THEN IF FNirqline AND icontrol% AND NOT int_inhib% THEN
+          int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>9)+(D%>>12):I%=0:insbuffer%=0:D%=0:P%=1
+          IFTF%THENPROCtrace_file("* INTERRUPT - Int buffer set to "+FNo0(intbuffer%,2))
+        ENDIF
         IF int_inhib%<0 THEN int_inhib%+=1
         startpc%=P%:PROCexecute:REM for status
         IF TF% OR TS% THEN
@@ -324,6 +325,9 @@
 
       DEFPROCinit
       REM PC for FOCAL69 or memory test (0200), should be &FEE for RIM load. SR is 3777 for BIN load from HST
+      REM A%=accumulator, Q%=MQ register, C%=fetched memory contents, P%=program counter, M%=address of memory block, I%=instruction field, D%=data field, L%=link register
+      REM K%=keyboard flag, T%=teleprinter flag
+      REM S%=single-step enabled, TF%=Status display enabled, TS%=Trace to screen enabled
       REM int%=Interrupts on/off, int_inhib%=interrupt inhibit (e.g. ION instruction), icontrol%=memory extension interrupt inhibit
       P%=128:A%=0:L%=0:Q%=0:sr%=&7FF:int%=FALSE:int_inhib%=FALSE
       REM Memory control
