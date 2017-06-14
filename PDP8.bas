@@ -131,8 +131,7 @@
         temp%=(ASCttybuf$)AND127
         CASE temp% OF
           WHEN12: temp%=0:REM Ignore form-feed (clear screen), this isn't a teleprinter
-          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:
-            REM Expand tabs to 8 chars
+          WHEN 9: pos%=((POS+8)DIV8*8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:REM Expand tabs to 8 chars
           WHEN 7: PROCbell(200)
           WHEN 0: REM suppress output of ASCII 0 to text output file
           OTHERWISE: VDUtemp%:BPUT#screen%,temp%
