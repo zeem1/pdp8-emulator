@@ -17,7 +17,7 @@
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
 
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
-      file%=FALSE:rk_file%=FALSE:REM Prevents failure when no tape or disk image opened
+      file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
       REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
@@ -164,7 +164,7 @@
       ENDPROC
       :
       DEFPROCfile
-      LOCALF$,c$
+      LOCALF$,c$,d%
       INPUT"(T)ape/(D)isk/(C)ore image",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "T":
@@ -176,9 +176,25 @@
         WHEN"D":
           OSCLI"DIR "+@dir$:OSCLI". *.RK05"
           INPUT"RK05 FILE NAME",F$
-          IF rk_file%<>0 THEN CLOSE#rk_file%
-          rk_file%=OPENUP(@dir$+"/"+F$)
-          IF rk_file%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE" ELSE PRINT "COULD NOT LOAD "+F$
+          INPUT"LOAD TO DISK UNIT (0-3)",d%
+          CASE d% OF
+            WHEN 0:
+              IF rk_file0%<>0 THEN CLOSE#rk_file0%
+              rk_file0%=OPENUP(@dir$+"/"+F$)
+              IF rk_file0%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE TO UNIT ";d% ELSE PRINT "COULD NOT LOAD "+F$
+            WHEN 1:
+              IF rk_file1%<>0 THEN CLOSE#rk_file1%
+              rk_file1%=OPENUP(@dir$+"/"+F$)
+              IF rk_file1%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE TO UNIT ";d% ELSE PRINT "COULD NOT LOAD "+F$
+            WHEN 2:
+              IF rk_file2%<>0 THEN CLOSE#rk_file2%
+              rk_file2%=OPENUP(@dir$+"/"+F$)
+              IF rk_file2%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE TO UNIT ";d% ELSE PRINT "COULD NOT LOAD "+F$
+            WHEN 3:
+              IF rk_file3%<>0 THEN CLOSE#rk_file3%
+              rk_file3%=OPENUP(@dir$+"/"+F$)
+              IF rk_file3%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE TO UNIT ";d% ELSE PRINT "COULD NOT LOAD "+F$
+          ENDCASE
         WHEN"C":
           PROCcore_image
       ENDCASE
@@ -224,7 +240,7 @@
 
       DEFPROCmanual_deposit
       LOCALc$,c%,p%
-      INPUT "(P)C, (A)C, (M)EMORY, (S)WITCH REG, (D)ATA FIELD, (I)NSTR FIELD, M(Q)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      INPUT "(P)C, (A)C, (M)EMORY, (S)WITCH REG, (D)F, (I)F, I(B), M(Q)",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "P":
           INPUT"PC";p%:P%=FNo2d(p%)AND&FFF
@@ -252,7 +268,13 @@
           REPEAT
             PRINT "CURRENT IF IS ";I%>>12:INPUT "ENTER NEW IF (0-7):"c%
           UNTIL c%>=FALSE AND c%<=7
-          I%=c%<<12:insbuffer%=I%:REM second one is a test for problem when manually depositing IF
+          I%=c%<<12
+        WHEN "B":
+          REPEAT
+            PRINT "CURRENT IB IS ";insbuffer%>>12:INPUT "ENTER NEW IB (0-7):"c%
+          UNTIL c%>=FALSE AND c%<=7
+          insbuffer%=c%<<12
+
       ENDCASE
       ENDPROC
 
