@@ -164,7 +164,7 @@
       ENDPROC
       :
       DEFPROCfile
-      LOCALF$,c$,d%
+      LOCALF$,c$
       INPUT"(T)ape/(D)isk/(C)ore image",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "T":
@@ -174,6 +174,17 @@
           file%=OPENIN(@dir$+"/"+F$):hstbuffer%=BGET#file%:hstflag%=TRUE
           IF file%<>0 THEN PRINT"LOADED "+F$+" TAPE" ELSE PRINT "COULD NOT LOAD "+F$
         WHEN"D":
+          PROCdiskmenu
+        WHEN"C":
+          PROCcore_image
+      ENDCASE
+      ENDPROC
+
+      DEFPROCdiskmenu
+      LOCALF$,c$
+      INPUT"(L)oad, (U)nload, Write (P)rotect, Write (E)nable",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "L":
           OSCLI"DIR "+@dir$:OSCLI". *.RK05"
           INPUT"RK05 FILE NAME",F$
           INPUT"LOAD TO DISK UNIT (0-3)",d%
@@ -195,8 +206,50 @@
               rk_file3%=OPENUP(@dir$+"/"+F$)
               IF rk_file3%<>0 THEN PRINT"LOADED "+F$+" DISK IMAGE TO UNIT ";d% ELSE PRINT "COULD NOT LOAD "+F$
           ENDCASE
-        WHEN"C":
-          PROCcore_image
+        WHEN "U":
+          INPUT"UNLOAD FROM DISK UNIT (0-3)",d%
+          CASE d% OF
+            WHEN 0:
+              IF rk_file0%<>0 THEN CLOSE#rk_file0%:PRINT"UNLOADED RK05 UNIT ";d% ELSE PRINT "COULD NOT UNLOAD UNIT ";d%
+            WHEN 1:
+              IF rk_file1%<>0 THEN CLOSE#rk_file1%:PRINT"UNLOADED RK05 UNIT ";d% ELSE PRINT "COULD NOT UNLOAD UNIT ";d%
+            WHEN 2:
+              IF rk_file2%<>0 THEN CLOSE#rk_file2%:PRINT"UNLOADED RK05 UNIT ";d% ELSE PRINT "COULD NOT UNLOAD UNIT ";d%
+            WHEN 3:
+              IF rk_file3%<>0 THEN CLOSE#rk_file3%:PRINT"UNLOADED RK05 UNIT ";d% ELSE PRINT "COULD NOT UNLOAD UNIT ";d%
+          ENDCASE
+        WHEN "P":
+          INPUT"WRITE PROTECT DISK UNIT (0-3)",d%
+          CASE d% OF
+            WHEN 0:
+              rkro0%=TRUE
+              PRINT"WRITE PROTECTED RK05 UNIT 0"
+            WHEN 1:
+              rkro1%=TRUE
+              PRINT"WRITE PROTECTED RK05 UNIT 1"
+            WHEN 2:
+              rkro2%=TRUE
+              PRINT"WRITE PROTECTED RK05 UNIT 2"
+            WHEN 3:
+              rkro3%=TRUE
+              PRINT"WRITE PROTECTED RK05 UNIT 3"
+          ENDCASE
+        WHEN "E":
+          INPUT"WRITE ENABLE DISK UNIT (0-3)",d%
+          CASE d% OF
+            WHEN 0:
+              rkro0%=FALSE
+              PRINT"WRITE ENABLED RK05 UNIT 0"
+            WHEN 1:
+              rkro1%=FALSE
+              PRINT"WRITE ENABLED RK05 UNIT 1"
+            WHEN 2:
+              rkro2%=FALSE
+              PRINT"WRITE ENABLED RK05 UNIT 2"
+            WHEN 3:
+              rkro3%=FALSE
+              PRINT"WRITE ENABLED RK05 UNIT 3"
+          ENDCASE
       ENDCASE
       ENDPROC
 
@@ -315,6 +368,7 @@
       kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=FALSE
       REM RK8E
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
+      rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
 
       REM Debugging options
       S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
