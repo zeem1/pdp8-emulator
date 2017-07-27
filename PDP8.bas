@@ -2,6 +2,7 @@
       INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
+      INSTALL @dir$+"EAE.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
@@ -79,7 +80,7 @@
               IF (C%AND&6) = &6 THEN A%=A%<<&1:A%=A%+L%:L%=(A% AND &1000)>>&C:A%=A% AND &FFF: REM RTL rotate <L,AC> left twice
               IF (C%AND&A) = &A THEN A%=A%+L%*&1000:L%=A% AND &1:A%=A%>>&1: REM RTR rotate <L,AC> right twice
               IF (C%AND&E) = &2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<&6)+(temp%>>&6):REM BSW (8e and up)
-            WHEN 3840: REM Groups 2 and 3 (%1111xxxxxxxx)
+            WHEN &F00: REM Groups 2 and 3 (%1111xxxxxxxx)
               IF (C%AND&1)=FALSE THEN
                 REM Group 2 (%1111xxxxxxx0), (OR|AND) group
                 cond%=FALSE
@@ -87,19 +88,15 @@
                 IF (C%AND&20)=&20THENIF A%=FALSE cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
                 IF (C%AND&10)=&10THENIF L%=&1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
                 IF (C%AND&80)=&80THEN A%=FALSE: REM CLA
-                IF (C%AND&2)  =  &2THEN PRINT'"CPU HALT"':PROCcommand:REM Crashes on Toshiba - PROCbell(150)
-                IF (C%AND&4)  =  &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
+                IF (C%AND&2) = &2THEN PRINT'"CPU HALT"':PROCcommand:REM Crashes on Toshiba - PROCbell(150)
+                IF (C%AND&4) = &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
                 IF (C%AND&8)=FALSE THEN
                   IF cond%=TRUE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
                 ELSE
                   IF cond%=FALSE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 set (AND), skip if all conditions true
                 ENDIF
               ELSE
-                REM Group 3 (%1111xxxxxxx1); MQ instructions
-                IF (C%AND&80)=&80THENA%=FALSE:REM Bit 5 set, CLA
-                IF (C%AND80)=&40THENA%=A%ORQ%:REM Bit 6 set, MQA
-                IF (C%AND80)=&10THENQ%=A%:A%=FALSE:REM Bit 8 set, MQL
-                IF (C%AND80)=80THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 6 and 8 set, SWP
+                PROCeae:REM Group 3 (%1111xxxxxxx1); MQ/EAE instructions               
               ENDIF
           ENDCASE
           P%=(P%-TRUE)AND&FFF
@@ -369,6 +366,8 @@
       REM RK8E
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
+      REM KE8-E Extended Arithmetic Element
+      eae_sc%=FALSE:eae_instr%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, instruction register, mode (A=FALSE, B=TRUE), greater than flag
 
       REM Debugging options
       S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
