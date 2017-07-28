@@ -2,7 +2,7 @@
       INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
-      INSTALL @dir$+"EAE.bbc"
+      REM INSTALL @dir$+"EAE.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
@@ -20,7 +20,7 @@
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
-      REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       DIM M% 131071
@@ -96,7 +96,7 @@
                   IF cond%=FALSE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 set (AND), skip if all conditions true
                 ENDIF
               ELSE
-                PROCeae:REM Group 3 (%1111xxxxxxx1); MQ/EAE instructions               
+                PROCeae:REM Group 3 (%1111xxxxxxx1); MQ/EAE instructions
               ENDIF
           ENDCASE
           P%=(P%-TRUE)AND&FFF
@@ -260,7 +260,7 @@
           INPUT"NUMBER OF WORDS",count%
           file%=OPENOUT(@dir$+"/"+F$)
           IF file%<>0 THEN
-            FORn%=FALSETOcount%-1
+            FORn%=FALSE TOcount%-1
               word%=FNexamine(n%)
               BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND63)+33
               IF (n%MOD&40)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
@@ -403,3 +403,43 @@
       ENDPROC
 
 
+      DEFPROCeae
+      LOCALtemp%,temp2%
+      PRINT "EAE PROCEDURE CALLED HERE, INSTR ";FNo0(C%,4);" MODE=";eae_mode%
+      REM Mode swap instructions, come first otherwise SCA/MQL bits conflict
+      IF (C%AND&3E)=&18THENPRINT"MODE SET TO TRUE (B)":eae_mode%=TRUE:ENDPROC:REM SWAB
+      IF (C%AND&3E)=&26THENPRINT"MODE SET TO FALSE (A)":eae_mode%=FALSE:ENDPROC:REM SWBA
+      REM Standard MQ instructions
+      IF (C%AND&90)=&80THENA%=FALSE:REM Bit 4 set and bit 7 clear, CLA
+      IF (C%AND&40)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
+      IF (C%AND&10)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
+      IF (C%AND&90)=&90THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 4 and 7 set, SWP
+      REM EAE instructions
+      IF eae_mode%=FALSE THEN
+        REM Mode A
+        IF (C%AND&20)=&20THENA%=A%OReae_sc%:REM bit 6 set, SCA
+        CASE (C%AND&E) OF
+          WHEN 2: P%=(P%-TRUE)AND&FFF:eae_sc%=NOT(FNexamine(I%+P%))AND&1F:REM SCL
+          WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(I%+P%))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:L%=FALSE:REM MUY
+          WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):Q%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%:REM DVI
+          WHEN 8: REM NMI
+            eae_sc%=FALSE:temp%=(A%<<12)+Q%:IFtemp%AND&3FFFFF=0THENENDPROC:REM Already normalised
+            REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTIL((temp%AND&100000)<<1)=temp%AND&200000
+            L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+          WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT(FNexamine(I%+P%)AND&1F))AND&1F:REM SHL
+            REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
+            L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+          WHEN 12: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT(FNexamine(I%+P%)AND&1F))AND&1F:REM ASR
+            REPEAT:temp2%=temp%AND&800000:temp%=(temp%>>1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
+            L%=temp2%>>23:A%=((temp%AND&FFF000)>>12)+temp2%:Q%=temp%AND&FFF
+          WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT(FNexamine(I%+P%)AND&1F))AND&1F:REM LSR
+            REPEAT:temp%=(temp%>>1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
+            L%=0:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+        ENDCASE
+      ELSE
+        REM Mode B
+        CASE (C%AND&FE) OF
+          WHEN &28: IF NOT(A%+Q%)THENP%=(P%-TRUE)AND&FFF
+        ENDCASE
+      ENDIF
+      ENDPROC
