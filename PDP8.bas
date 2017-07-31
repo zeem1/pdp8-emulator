@@ -422,11 +422,10 @@
         CASE (C%AND&E) OF
           WHEN 2: P%=(P%-TRUE)AND&FFF:eae_sc%=NOT(FNexamine(I%+P%))AND&1F:REM SCL
           WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(I%+P%))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:L%=FALSE:REM MUY
-          WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):Q%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%:REM DVI
+          WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):IFtemp2%>0THENQ%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%ELSEL%=1:A%=&FFF:Q%=&FFF:REM DVI; div-by-0 result is a test
           WHEN 8: REM NMI
             eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
-            REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:PROCpause
-            UNTIL((temp%AND&200000)<<1)<>temp%AND&400000
+            REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTIL((temp%AND&400000)<<1)<>(temp%AND&800000)
             L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
           WHEN 10:
             P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT FNexamine(I%+P%))AND&1F:REM SHL
@@ -452,21 +451,20 @@
             WHEN 10: REM DPIC
             WHEN 12: REM DCM
             WHEN 14: IFA%<=Q%THENL%=1ELSEL%=0:REM SAM
-              A%=Q%-A%
-              REM GTF FLAG? MANUAL PAGE 5-9
+              A%=(Q%-A%)AND&FFFFFF:IFQ%>=A%THENeae_gtf%=TRUE
           ENDCASE
         ELSE
           CASE C%AND&E OF
             WHEN 2: eae_sc%=A%AND&1F:A%=FALSE:REM ACS
             WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(D%+FNexamine(I%+P%)))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM MUY
-            WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(D%+FNexamine(I%+P%)):Q%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%:REM DVI
+            WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(D%+FNexamine(I%+P%)):IFtemp2%>0THENQ%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%ELSEL%=1:A%=&FFF:Q%=&FFF:REM DVI; div-by-0 result is a test
             WHEN 8: REM NMI
-              eae_sc%=FALSE:temp%=(A%<<12)+Q%:IFtemp%AND&3FFFFF=0THENENDPROC:REM Already normalised
-              REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTIL((temp%AND&200000)<<1)<>temp%AND&400000
+              eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
+              REPEAT:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTIL((temp%AND&400000)<<1)<>(temp%AND&800000)
               L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F):REM SHL
+            WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
               WHILEeae_sc%>0:temp%=(temp%<<1)AND&1FFFFFF:eae_sc%-=1
-                L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:eae_gtf%=FALSE:REM GTF is a test ******
+                L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
               WHEN 12:  P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F):REM ASR - not finished (GTF flag?)
                 WHILEeae_sc%>0:temp2%=temp%AND&800000:temp%=(temp%>>1)AND&FFFFFF:eae_sc%-=1:ENDWHILE
                 L%=temp2%>>23:A%=((temp%AND&FFF000)>>12)+temp2%:Q%=temp%AND&FFF
