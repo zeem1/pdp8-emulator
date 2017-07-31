@@ -418,13 +418,12 @@
       REM EAE instructions
       IF eae_mode%=FALSE THEN
         REM Mode A
-        IF (C%AND&20)=&20THENPROCtrace_file("Mode A SCA, SC="+FNb0(eae_sc%,5)+"AC is now "+FNb0(A%,12)):A%=A%OReae_sc%:REM bit 6 set, SCA
+        IF (C%AND&20)=&20THENA%=A%OReae_sc%:REM bit 6 set, SCA
         CASE (C%AND&E) OF
           WHEN 2: P%=(P%-TRUE)AND&FFF:eae_sc%=NOT(FNexamine(I%+P%))AND&1F:REM SCL
           WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(I%+P%))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:L%=FALSE:REM MUY
           WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):IFtemp2%>0THENQ%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%ELSEL%=1:A%=&FFF:Q%=&FFF:REM DVI; div-by-0 result is a test
           WHEN 8: REM NMI
-
             eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
             PROCtrace_file("Mode A Normalise started, A-MQ="+FNb0(temp%,24)+" SC="+FNb0(eae_sc%,5))
             REPEAT:temp%=temp%<<1:eae_sc%=(eae_sc%+1)AND&1F:UNTIL((temp%AND&400000)<<1)<>(temp%AND&800000)
@@ -453,8 +452,7 @@
             WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
             WHEN 10: REM DPIC
             WHEN 12: REM DCM
-            WHEN 14: IFA%<=Q%THENL%=1ELSEL%=0:REM SAM
-              A%=(Q%-A%)AND&FFFFFF:IFQ%>=A%THENeae_gtf%=TRUE
+            WHEN 14: L%=-(A%<=Q%):eae_gtf%=(((Q%AND&800)*-2048)+(Q%AND&7FF))>=(((A%AND&800)*-2048)+(A%AND&7FF)):A%=(Q%-A%)AND&FFFFFF:REM SAM
           ENDCASE
         ELSE
           CASE C%AND&E OF
