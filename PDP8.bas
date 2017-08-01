@@ -455,7 +455,7 @@
             WHEN 12: REM DCM
             WHEN 14: REM L%=-FNtc12(A%)<=FNtc12(Q%):eae_gtf%=FNtc12(Q%)>=FNtc12(A%):A%=(FNtc12(Q%)-FNtc12(A%))AND***&FFFFFF***:REM SAM
               PROCtrace_file("SAM INSTRUCTION ("+FNo0(C%,4)+"). MQ="+FNo0(Q%,4)+" A="+FNo0(A%,4))
-              eae_gtf%=FNtc12(Q%)>=FNtc12(A%):PROCtrace_file("Set GTF to "+STR$eae_gt%+ " (MQ>=AC)")
+              eae_gtf%=FNtc12(Q%)>=FNtc12(A%):PROCtrace_file("Set GTF to "+STR$eae_gtf%+ " (MQ>=AC)")
               A%=(FNtc12(Q%)-FNtc12(A%)):PROCtrace_file("Set A to "+FNo0(A%,5))
               L%=(A%AND&1000000)>>12:PROCtrace_file("Set L to "+STR$L%)
               A%=A%AND&FFF:PROCtrace_file("Set A to "+FNo0(A%,4)+ " ("+STR$FNtc12(A%)+")"):REM SAM
