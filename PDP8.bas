@@ -35,7 +35,6 @@
       :
       REM ** Main loop **
       REPEAT
-        IFINKEY(-114)THENPROCcommand
         IF int% THEN IF NOT int_inhib% THEN IF FNirqline THEN IF icontrol% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>&9)+(D%>>&C):I%=FALSE:insbuffer%=FALSE:D%=FALSE:P%=&1
         IF int_inhib%<FALSE THEN int_inhib%-=TRUE
         startpc%=P%:REM IFP%=1920THENTF%=TRUE
@@ -45,6 +44,7 @@
           IF TF% THEN PROCtrace_file(d$)
           IF TS% THEN PROC_selectwin(&1):PRINTd$:PROC_selectwin(0)
         ENDIF
+        IFINKEY(-114)THENPROCcommand
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -310,9 +310,9 @@
         WHEN "M":
           INPUT"LOCATION";p%:p%=FNo2d(p%)AND&7FFF
           REPEAT
-            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
+            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M%!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
           UNTIL VAL(LEFT$(STR$c%,1))>=FALSE AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=FALSE AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=FALSE AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=FALSE AND VAL(RIGHT$(STR$c%,1))<=7
-          M!(p%<<2)=c%
+          M%!(p%<<2)=FNo2d(c%)
         WHEN "S":
           REPEAT
             PRINT "CURRENT SR IS ";FNo0(sr%,4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
@@ -397,7 +397,7 @@
 
       ENDPROC
 
-      DEFPROCtrace_file(t$):PRINT#trace%,t$:BPUT#trace%,10:ENDPROC
+      DEFPROCtrace_file(t$):PRINT#trace%,t$:BPUT#trace%,10:PTR#trace%=PTR#trace%:ENDPROC
 
       DEFPROCquit
       LOCALc$,c%
@@ -426,10 +426,8 @@
           WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):IFtemp2%>0THENQ%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%ELSEL%=1:A%=&FFF:Q%=&FFF:REM DVI; div-by-0 result is a test
           WHEN 8: REM NMI
             eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
-            PROCtrace_file("Mode A Normalise started, A-MQ="+FNb0(temp%,24)+" SC="+FNb0(eae_sc%,5))
             REPEAT:L%=(temp%AND&800000)>>23:temp%=(temp%<<1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILtemp%=&C00000OR(((temp%AND&400000)<<1)<>(temp%AND&800000))
             A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            PROCtrace_file("Mode A Normalise finished, A-MQ="+FNb0((A%<<12)+Q%,24)+" SC="+FNb0(eae_sc%,5))
           WHEN 10:
             P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT FNexamine(I%+P%))AND&1F:REM SHL
             REPEAT:temp%=temp%<<1:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
@@ -449,16 +447,11 @@
             WHEN 0: A%=A%OReae_sc%:REM SCA
             WHEN 2: REM DAD
             WHEN 4: REM DST
-            WHEN 6: P%=(P%-TRUE)AND&FFF:REM SWBA
+            WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
             WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
             WHEN 10: REM DPIC
             WHEN 12: REM DCM
-            WHEN 14: REM L%=-FNtc12(A%)<=FNtc12(Q%):eae_gtf%=FNtc12(Q%)>=FNtc12(A%):A%=(FNtc12(Q%)-FNtc12(A%))AND***&FFFFFF***:REM SAM
-              PROCtrace_file("SAM INSTRUCTION ("+FNo0(C%,4)+"). MQ="+FNo0(Q%,4)+" A="+FNo0(A%,4))
-              eae_gtf%=FNtc12(Q%)>=FNtc12(A%):PROCtrace_file("Set GTF to "+STR$eae_gtf%+ " (MQ>=AC)")
-              A%=(FNtc12(Q%)-FNtc12(A%)):PROCtrace_file("Set A to "+FNo0(A%,5))
-              L%=(A%AND&1000000)>>12:PROCtrace_file("Set L to "+STR$L%)
-              A%=A%AND&FFF:PROCtrace_file("Set A to "+FNo0(A%,4)+ " ("+STR$FNtc12(A%)+")"):REM SAM
+            WHEN 14: eae_gtf%=FNtc12(Q%)>=FNtc12(A%):L%=-(A%<=Q%):A%=(FNtc12(Q%)-FNtc12(A%))AND&FFF:REM SAM
           ENDCASE
         ELSE
           CASE C%AND&E OF
@@ -469,19 +462,19 @@
               eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
               REPEAT:L%=(temp%AND&800000)>>23:temp%=(temp%<<1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILtemp%=&C00000OR(((temp%AND&400000)<<1)<>(temp%AND&800000))
               A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
-              WHILEeae_sc%>0:temp%=temp%<<1:eae_sc%-=1
-                L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-              WHEN 12:  P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F):REM ASR - not finished (GTF flag?)
-                WHILEeae_sc%>0:temp2%=temp%AND&800000:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
-                L%=temp2%>>23:A%=((temp%AND&FFF000)>>12)+temp2%:Q%=temp%AND&FFF
-              WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F):REM LSR - not finished (GTF flag?)
-                WHILEeae_sc%>0:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
-                L%=0:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            ENDCASE
-          ENDIF
+            WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(L%<<24)+(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
+              WHILEeae_sc%>0:temp%=temp%<<1:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
+              L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+            WHEN 12:  P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM ASR - not finished (GTF flag?)
+              WHILEeae_sc%>0:temp2%=temp%AND&800000:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
+              L%=temp2%>>23:A%=((temp%AND&FFF000)>>12)+temp2%:Q%=temp%AND&FFF
+            WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM LSR - not finished (GTF flag?)
+              WHILEeae_sc%>0:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
+              L%=0:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+          ENDCASE
         ENDIF
-        ENDPROC
+      ENDIF
+      ENDPROC
 
-        DEFFNtc12(w%):=(((w%AND&800)*-2048)+(w%AND&7FF))
+      DEFFNtc12(w%):=((((w%AND&800)=&800)*2048)+(w%AND&7FF))
 
