@@ -20,7 +20,7 @@
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
-      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      REM ******************************** ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       DIM M% 131071
@@ -89,7 +89,7 @@
                 IF (C%AND&20)=&20THENIF A%=FALSE cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
                 IF (C%AND&10)=&10THENIF L%=&1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
                 IF (C%AND&80)=&80THEN A%=FALSE: REM CLA
-                IF (C%AND&2) = &2THEN PRINT'"CPU HALT"':PROCbell(150):PROCcommand:REM Bell crashes on Toshiba
+                IF (C%AND&2) = &2THEN PRINT'"CPU HALT AT ";TIME$':PROCbell(150):PROCcommand:REM Bell crashes on Toshiba
                 IF (C%AND&4) = &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
                 IF (C%AND&8)=FALSE THEN
                   IF cond%=TRUE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
@@ -166,7 +166,7 @@
           WHEN "Q":
             PROCquit
         ENDCASE
-      UNTILc$="C"
+      UNTILc$="C":PRINT'"EXECUTION STARTED AT ";TIME$'
       ENDPROC
       :
       DEFPROCfile
@@ -450,6 +450,8 @@
             WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
             WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
             WHEN 10: REM DPIC
+              REM MQA/MQL bits must be set (SWP), so swap back again before incrementing
+              temp%=(Q%<<12)+A%:temp%+=1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
             WHEN 12: REM DCM
             WHEN 14: eae_gtf%=FNtc12(Q%)>=FNtc12(A%):L%=-(A%<=Q%):A%=(FNtc12(Q%)-FNtc12(A%))AND&FFF:REM SAM
           ENDCASE
@@ -465,12 +467,12 @@
             WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(L%<<24)+(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
               WHILEeae_sc%>0:temp%=temp%<<1:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
               L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            WHEN 12:  P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM ASR - not finished (GTF flag?)
-              WHILEeae_sc%>0:temp2%=temp%AND&800000:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
-              L%=temp2%>>23:A%=((temp%AND&FFF000)>>12)+temp2%:Q%=temp%AND&FFF
-            WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM LSR - not finished (GTF flag?)
-              WHILEeae_sc%>0:temp%=temp%>>1:eae_sc%-=1:ENDWHILE
-              L%=0:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+            WHEN 12: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:L%=-((A%AND&800)=&800):REM ASR
+              WHILEeae_sc%>0:eae_gtf%=-(temp%AND1):temp2%=temp%AND&800000:temp%=temp%>>1:temp%=temp%+temp2%:L%=temp2%>>23:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
+              A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+            WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:L%=FALSE:REM LSR
+              WHILEeae_sc%>0:eae_gtf%=-(temp%AND1):temp%=temp%>>1:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
+              A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
           ENDCASE
         ENDIF
       ENDIF
