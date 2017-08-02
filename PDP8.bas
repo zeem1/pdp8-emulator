@@ -445,14 +445,15 @@
         IF (C%AND&20)=&20THEN
           CASE C%AND&E OF
             WHEN 0: A%=A%OReae_sc%:REM SCA
-            WHEN 2: REM DAD
-            WHEN 4: REM DST
+            WHEN 2: temp%=(A%<<12)+Q%:temp%=temp%+FNexamine(D%+FNexamine(I%+P%))+(FNexamine(D%+FNexamine(I%+((P%+1)AND&FFF)))<<12):REM DAD
+              L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
+            WHEN 4: P%=(P%-TRUE)AND&FFF:PROCdeposit(D%+FNexamine(I%+P%),Q%):PROCdeposit(D%+FNexamine(I%+P%)+1,A%):REM DST
             WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
             WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
             WHEN 10: REM DPIC
               REM MQA/MQL bits must be set (SWP), so swap back again before incrementing
               temp%=(Q%<<12)+A%:temp%+=1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-            WHEN 12: REM DCM
+            WHEN 12: temp%=(Q%<<12)+A%:temp%=((NOTtemp%)AND&FFFFFF)+1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM DCM
             WHEN 14: eae_gtf%=FNtc12(Q%)>=FNtc12(A%):L%=-(A%<=Q%):A%=(FNtc12(Q%)-FNtc12(A%))AND&FFF:REM SAM
           ENDCASE
         ELSE
