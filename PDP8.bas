@@ -445,7 +445,7 @@
         IF (C%AND&20)=&20THEN
           CASE C%AND&E OF
             WHEN 0: A%=A%OReae_sc%:REM SCA
-            WHEN 2: temp%=(A%<<12)+Q%:temp%=temp%+FNexamine(D%+FNexamine(I%+P%))+(FNexamine(D%+FNexamine(I%+((P%+1)AND&FFF)))<<12):REM DAD
+            WHEN 2: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp%=temp%+FNexamine(D%+FNexamine(I%+P%))+(FNexamine(D%+FNexamine(I%+((P%+1)AND&FFF)))<<12):REM DAD
               L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
             WHEN 4: P%=(P%-TRUE)AND&FFF:PROCdeposit(D%+FNexamine(I%+P%),Q%):PROCdeposit(D%+FNexamine(I%+P%)+1,A%):REM DST
             WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
