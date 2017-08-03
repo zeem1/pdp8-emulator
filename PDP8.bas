@@ -44,7 +44,7 @@
           IF TF% THEN PROCtrace_file(d$)
           IF TS% THEN PROC_selectwin(&1):PRINTd$:PROC_selectwin(0)
         ENDIF
-        IFINKEY(-114)THENPROCcommand
+        IFINKEY(-114)ORF%THENF%=FALSE:PROCcommand
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -56,8 +56,10 @@
         IF temp%>&7 AND temp%<&10 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)-TRUE)AND&FFF)
         =D%+FNexamine(I%+temp%)
       ENDIF
-      DEFPROCdeposit(address%,word%) M%!(address%<<&2)=word% ENDPROC
-      DEFFNexamine(address%) =M%!(address%<<&2)
+      DEFPROCdeposit(address%,word%):IFTF%THENPROCtrace_file("Deposit addr "+FNo0(address%,4)+" with "+FNo0(word%,4))
+      M%!(address%<<&2)=word% ENDPROC
+      DEFFNexamine(address%):IFTF%THENPROCtrace_file("Examine addr "+FNo0(address%,4)+", contents "+FNo0(M%!(address%<<&2),4))
+      =M%!(address%<<&2)
       DEFFNirqline =(K% OR T%) AND kint%
       DEFPROCexecute
       C%=FNexamine(I%+P%):CASE C% AND &E00 OF
@@ -89,7 +91,7 @@
                 IF (C%AND&20)=&20THENIF A%=FALSE cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
                 IF (C%AND&10)=&10THENIF L%=&1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
                 IF (C%AND&80)=&80THEN A%=FALSE: REM CLA
-                IF (C%AND&2) = &2THEN PRINT'"CPU HALT AT ";TIME$':PROCbell(150):PROCcommand:REM Bell crashes on Toshiba
+                IF (C%AND&2) = &2THEN PRINT'"CPU HALT AT ";TIME$':PROCbell(150):F%=TRUE:REM Bell crashes on Toshiba
                 IF (C%AND&4) = &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
                 IF (C%AND&8)=FALSE THEN
                   IF cond%=TRUE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
@@ -156,7 +158,7 @@
         OSCLI"FX15,1":INPUT"COMMAND:"'"(C)ont/(E)xamine/(D)eposit/(F)ile/De(b)ug/(Q)uit",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
         CASE c$ OF
           WHEN "E":
-            INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(FNo2d(p%),5);" = ";FNo0(M%!((FNo2d(p%))<<2),4)
+            PROCexamine
           WHEN "D":
             PROCmanual_deposit
           WHEN "F":
@@ -167,6 +169,18 @@
             PROCquit
         ENDCASE
       UNTILc$="C":PRINT'"EXECUTION STARTED AT ";TIME$'
+      ENDPROC
+
+      DEFPROCexamine
+      LOCALc$
+      INPUT"(M)emory or (R)egisters",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "M":
+          INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(FNo2d(p%),5);" = ";FNo0(M%!((FNo2d(p%))<<2),4)
+        WHEN "R":
+          PRINT "PC:";FNo0(P%,4);" AC:";FNo0(A%,4);" MQ:";FNo0(Q%,4);" L:";L%;" DF:";D%>>12;" IF:";I%>>12
+          PRINT "EAE SC:";FNo0(eae_sc%,2);" GTF:";ABSeae_gtf%;" MODE:";:IFeae_mode%PRINT"B"ELSEPRINT"A"
+      ENDCASE
       ENDPROC
       :
       DEFPROCfile
@@ -308,11 +322,14 @@
         WHEN "Q":
           INPUT"MQ";p%:Q%=FNo2d(p%)AND&FFF
         WHEN "M":
-          INPUT"LOCATION";p%:p%=FNo2d(p%)AND&7FFF
+          INPUT"START LOCATION";p%:p%=FNo2d(p%)AND&7FFF
           REPEAT
-            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M%!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
-          UNTIL VAL(LEFT$(STR$c%,1))>=FALSE AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=FALSE AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=FALSE AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=FALSE AND VAL(RIGHT$(STR$c%,1))<=7
-          M%!(p%<<2)=FNo2d(c%)
+            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M%!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777) (-1 TO QUIT):"c%
+            IFFNo2d(c%)>=0ANDFNo2d(c%)<=4095THENM%!(p%<<2)=FNo2d(c%)
+            p%=(p%+1)AND&FFF
+          UNTILc%<0ORc%>7777
+          REM UNTIL NOT(VAL(LEFT$(STR$c%,1))>=FALSE AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=FALSE AND
+          REM VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=FALSE AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=FALSE AND VAL(RIGHT$(STR$c%,1))<=7)
         WHEN "S":
           REPEAT
             PRINT "CURRENT SR IS ";FNo0(sr%,4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
@@ -376,10 +393,10 @@
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
       REM KE8-E Extended Arithmetic Element
-      eae_sc%=FALSE:eae_instr%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, instruction register, mode (A=FALSE, B=TRUE), greater than flag
+      eae_sc%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, instruction register, mode (A=FALSE, B=TRUE), greater than flag
 
       REM Debugging options
-      S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
+      S%=FALSE:TF%=FALSE:TS%=FALSE:F%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen, HLT flag
 
       REM Set up the RIM and BIN loaders in memory
       RESTORE
@@ -445,13 +462,14 @@
         IF (C%AND&20)=&20THEN
           CASE C%AND&E OF
             WHEN 0: A%=A%OReae_sc%:REM SCA
-            WHEN 2: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp%=temp%+FNexamine(D%+FNexamine(I%+P%))+(FNexamine(D%+FNexamine(I%+((P%+1)AND&FFF)))<<12):REM DAD
+            WHEN 2: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=D%+FNexamine(I%+P%):REM DAD
+              temp%=temp%+(FNexamine(temp2%+1)<<12)+FNexamine(temp2%)
               L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
             WHEN 4: P%=(P%-TRUE)AND&FFF:PROCdeposit(D%+FNexamine(I%+P%),Q%):PROCdeposit(D%+FNexamine(I%+P%)+1,A%):REM DST
             WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
             WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
             WHEN 10: REM DPIC
-              REM MQA/MQL bits must be set (SWP), so swap back again before incrementing
+              REM In this and DCM, MQA/MQL bits must be set (SWP), so swap back again before incrementing
               temp%=(Q%<<12)+A%:temp%+=1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
             WHEN 12: temp%=(Q%<<12)+A%:temp%=((NOTtemp%)AND&FFFFFF)+1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM DCM
             WHEN 14: eae_gtf%=FNtc12(Q%)>=FNtc12(A%):L%=-(A%<=Q%):A%=(FNtc12(Q%)-FNtc12(A%))AND&FFF:REM SAM
@@ -462,7 +480,9 @@
             WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(D%+FNexamine(I%+P%)))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM MUY
             WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(D%+FNexamine(I%+P%)):IFtemp2%>0THENQ%=temp%DIVtemp2%:L%=-(Q%=FALSE):A%=temp%MODtemp2%ELSEL%=1:A%=&FFF:Q%=&FFF:REM DVI; div-by-0 result is a test
             WHEN 8: REM NMI
-              eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
+              eae_sc%=FALSE:temp%=(A%<<12)+Q%
+              IF(temp%AND&7FFFFF)=0THENA%=FALSE:ENDPROC
+              IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
               REPEAT:L%=(temp%AND&800000)>>23:temp%=(temp%<<1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILtemp%=&C00000OR(((temp%AND&400000)<<1)<>(temp%AND&800000))
               A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
             WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(L%<<24)+(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
@@ -480,4 +500,5 @@
       ENDPROC
 
       DEFFNtc12(w%):=((((w%AND&800)=&800)*2048)+(w%AND&7FF))
+
 
