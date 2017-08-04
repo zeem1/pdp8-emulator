@@ -104,7 +104,7 @@
                 IF (C%AND&D0)=&80THENA%=FALSE:REM Bit 4 set and bit 7 clear, CLA
                 IF (C%AND&D0)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
                 IF (C%AND&D0)=&C0THENA%=Q%:REM Bits 4 and 5 set, CLA+MQA
-                IF (C%AND&D0)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
+                IF (C%AND&D0)=&10THENPRINT"MQL ";A%,Q%:Q%=A%:A%=FALSE:PRINTA%,Q%:REM Bit 7 set, MQL
                 IF (C%AND&D0)=&50THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 5 and 7 set (MQA+MQL), SWP
                 IF (C%AND&D0)=&90THENA%=FALSE:Q%=FALSE:REM Bits 4 and 7 set (CLA+MQL), CAM
                 PROCeae:REM Put here in case I add an option to disable the EAE
@@ -276,16 +276,17 @@
       ENDPROC
 
       DEFPROCcore_image
-      LOCAL F$,count%,n%,l%,file%,word%
+      LOCAL F$,start%,count%,n%,l%,file%,word%
       INPUT"(L)oad/(S)ave",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME TO SAVE",F$
-          INPUT"NUMBER OF WORDS",count%
+          INPUT"START ADDRESS (OCTAL)",start%
+          INPUT"NUMBER OF WORDS (OCTAL)",count%
           file%=OPENOUT(@dir$+"/"+F$)
           IF file%<>0 THEN
-            FORn%=FALSE TOcount%-1
+            FORn%=FNo2d(start%) TO FNo2d(count%)-1
               word%=FNexamine(n%)
               BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND63)+33
               IF (n%MOD&40)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
@@ -297,13 +298,14 @@
         WHEN "L":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME",F$
+          INPUT"START ADDRESS (OCTAL)",start%
           file%=OPENIN(@dir$+"/"+F$)
           IF file%<>0 THEN
-            address%=I%
+            IFTF%THENPROCtrace_file("Loading core image file"):address%=start%
             REPEAT
               byte1%=BGET#file%:IFbyte1%=10THENbyte1%=BGET#file%
               byte2%=BGET#file%
-              PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
+              PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):IFTF%THENPROCtrace_file("Load " + FNo0(address%,4) + " with " + FNo0(((byte1%-33)<<6) + (byte2%-33),4) )
               address%+=1
             UNTIL EOF#file%
             PRINT"LOADED "+F$+" IMAGE"
