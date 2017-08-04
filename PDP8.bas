@@ -123,12 +123,14 @@
       ENDPROC
 
       DEFPROCtprinter
-      LOCALtemp%,pos%
+      LOCALtemp%,pos%,temp$
       IFLENttybuf$>0THEN
         temp%=(ASCttybuf$)AND&7F
         CASE temp% OF
           WHEN &C: temp%=FALSE:REM Ignore form-feed (clear screen), this isn't a teleprinter
-          WHEN &9: pos%=((POS+&8)DIV&8*&8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:REM Expand tabs to 8 chars
+          WHEN &9: pos%=((POS+8)DIV8*8)
+            temp$="":FORN=1TOpos%-POS:temp$=temp$+" ":NEXT:PRINTtemp$;
+            PRINT#screen%,temp$:REM Expand tabs to 8 chars
           WHEN &7: PROCbell(200)
           WHEN FALSE: REM suppress output of ASCII 0 to text output file
           OTHERWISE: VDUtemp%:BPUT#screen%,temp%
@@ -388,7 +390,7 @@
       REM Memory control
       I%=FALSE:D%=FALSE:insbuffer%=FALSE:intbuffer%=FALSE:icontrol%=TRUE
       REM TTY/TAPE flags/buffers
-      kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=FALSE
+      kint%=TRUE:kbdbuf$=CHR$(0):ttybuf$=CHR$(0):K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=FALSE
       REM RK8E
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
