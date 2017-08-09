@@ -2,6 +2,7 @@
       INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
+      INSTALL @dir$+"EAE.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
@@ -19,7 +20,7 @@
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
-      REM ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      REM ******************************** ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       DIM M% 131071
@@ -34,15 +35,16 @@
       :
       REM ** Main loop **
       REPEAT
-        IFINKEY(-114)THENPROCcommand
         IF int% THEN IF NOT int_inhib% THEN IF FNirqline THEN IF icontrol% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>&9)+(D%>>&C):I%=FALSE:insbuffer%=FALSE:D%=FALSE:P%=&1
         IF int_inhib%<FALSE THEN int_inhib%-=TRUE
-        startpc%=P%:PROCexecute
+        startpc%=P%:REM IFP%=1920THENTF%=TRUE
+        PROCexecute
         IF TF% OR TS% THEN
           d$=FNstatus(startpc%)
-          IF TF% THEN PROCtrace_file(d$)
+          IF TF% THEN PROCtrace_file(d$+"K%="+STR$K%+" T%="+STR$T%+" fnirqline="+STR$FNirqline)
           IF TS% THEN PROC_selectwin(&1):PRINTd$:PROC_selectwin(0)
         ENDIF
+        IFINKEY(-114)ORF%THENF%=FALSE:PROCcommand
         IF S% THEN PROCpause
       UNTIL FALSE
       :
@@ -54,8 +56,10 @@
         IF temp%>&7 AND temp%<&10 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)-TRUE)AND&FFF)
         =D%+FNexamine(I%+temp%)
       ENDIF
-      DEFPROCdeposit(address%,word%) M%!(address%<<&2)=word% ENDPROC
-      DEFFNexamine(address%) =M%!(address%<<&2)
+      DEFPROCdeposit(address%,word%):IFTF%THENPROCtrace_file("Deposit addr "+FNo0(address%,4)+" with "+FNo0(word%,4))
+      M%!(address%<<&2)=word% ENDPROC
+      DEFFNexamine(address%):IFTF%THENPROCtrace_file("Examine addr "+FNo0(address%,4)+", contents "+FNo0(M%!(address%<<&2),4))
+      =M%!(address%<<&2)
       DEFFNirqline =(K% OR T%) AND kint%
       DEFPROCexecute
       C%=FNexamine(I%+P%):CASE C% AND &E00 OF
@@ -79,7 +83,7 @@
               IF (C%AND&6) = &6 THEN A%=A%<<&1:A%=A%+L%:L%=(A% AND &1000)>>&C:A%=A% AND &FFF: REM RTL rotate <L,AC> left twice
               IF (C%AND&A) = &A THEN A%=A%+L%*&1000:L%=A% AND &1:A%=A%>>&1: REM RTR rotate <L,AC> right twice
               IF (C%AND&E) = &2 THEN temp%=A%AND&FC0:A%=((A%AND&3F)<<&6)+(temp%>>&6):REM BSW (8e and up)
-            WHEN 3840: REM Groups 2 and 3 (%1111xxxxxxxx)
+            WHEN &F00: REM Groups 2 and 3 (%1111xxxxxxxx)
               IF (C%AND&1)=FALSE THEN
                 REM Group 2 (%1111xxxxxxx0), (OR|AND) group
                 cond%=FALSE
@@ -87,19 +91,23 @@
                 IF (C%AND&20)=&20THENIF A%=FALSE cond%=TRUE: REM SZA - Skip on AC = 0 (or group)  | SNA – Skip on AC ≠ 0 (and group)
                 IF (C%AND&10)=&10THENIF L%=&1 cond%=TRUE: REM SNL - Skip on L != 0 (or group)  |  SZL – Skip on L = 0 (and group)
                 IF (C%AND&80)=&80THEN A%=FALSE: REM CLA
-                IF (C%AND&2)  =  &2THEN PRINT'"CPU HALT"':PROCcommand:REM Crashes on Toshiba - PROCbell(150)
-                IF (C%AND&4)  =  &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
+                IF (C%AND&2) = &2THEN PRINT'"CPU HALT AT ";TIME$:PROCbell(150):F%=TRUE:REM Bell crashes on Toshiba
+                IF (C%AND&4) = &4THEN A%=A% OR sr%:REM OSR - logically 'or' front-panel switches with AC
                 IF (C%AND&8)=FALSE THEN
                   IF cond%=TRUE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 not set (OR), skip if any conditions true
                 ELSE
                   IF cond%=FALSE THEN P%=(P%-TRUE)AND&FFF:REM Bit 8 set (AND), skip if all conditions true
                 ENDIF
               ELSE
-                REM Group 3 (%1111xxxxxxx1); MQ instructions
-                IF (C%AND&80)=&80THENA%=FALSE:REM Bit 5 set, CLA
-                IF (C%AND80)=&40THENA%=A%ORQ%:REM Bit 6 set, MQA
-                IF (C%AND80)=&10THENQ%=A%:A%=FALSE:REM Bit 8 set, MQL
-                IF (C%AND80)=80THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 6 and 8 set, SWP
+                REM Group 3 (%1111xxxxxxx1); MQ/EAE instructions
+                REM Standard MQ instructions
+                IF (C%AND&D0)=&80THENA%=FALSE:REM Bit 4 set and bit 7 clear, CLA
+                IF (C%AND&D0)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
+                IF (C%AND&D0)=&C0THENA%=Q%:REM Bits 4 and 5 set, CLA+MQA
+                IF (C%AND&D0)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
+                IF (C%AND&D0)=&50THENtemp%=Q%:Q%=A%:A%=temp%:PROCtrace_file("SWP instruction executed"):REM Bits 5 and 7 set (MQA+MQL), SWP
+                IF (C%AND&D0)=&90THENA%=FALSE:Q%=FALSE:REM Bits 4 and 7 set (CLA+MQL), CAM
+                PROCeae:REM Put here in case I add an option to disable the EAE
               ENDIF
           ENDCASE
           P%=(P%-TRUE)AND&FFF
@@ -113,14 +121,16 @@
         kbdbuf$=kbdtemp$:K%=TRUE
       ENDIF
       ENDPROC
-      :
+
       DEFPROCtprinter
-      LOCALtemp%,pos%
+      LOCALtemp%,pos%,temp$
       IFLENttybuf$>0THEN
         temp%=(ASCttybuf$)AND&7F
         CASE temp% OF
           WHEN &C: temp%=FALSE:REM Ignore form-feed (clear screen), this isn't a teleprinter
-          WHEN &9: pos%=((POS+&8)DIV&8*&8):PRINTSPC(pos%-POS);:PRINT#screen%,SPC(pos%-POS);:REM Expand tabs to 8 chars
+          WHEN &9: pos%=((POS+8)DIV8*8)
+            temp$="":FORN=1TOpos%-POS:temp$=temp$+" ":NEXT:PRINTtemp$;
+            PRINT#screen%,temp$:REM Expand tabs to 8 chars
           WHEN &7: PROCbell(200)
           WHEN FALSE: REM suppress output of ASCII 0 to text output file
           OTHERWISE: VDUtemp%:BPUT#screen%,temp%
@@ -150,7 +160,7 @@
         OSCLI"FX15,1":INPUT"COMMAND:"'"(C)ont/(E)xamine/(D)eposit/(F)ile/De(b)ug/(Q)uit",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
         CASE c$ OF
           WHEN "E":
-            INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(FNo2d(p%),5);" = ";FNo0(M%!((FNo2d(p%))<<2),4)
+            PROCexamine
           WHEN "D":
             PROCmanual_deposit
           WHEN "F":
@@ -160,7 +170,19 @@
           WHEN "Q":
             PROCquit
         ENDCASE
-      UNTILc$="C"
+      UNTILc$="C":PRINT'"EXECUTION STARTED AT ";TIME$'
+      ENDPROC
+
+      DEFPROCexamine
+      LOCALc$
+      INPUT"(M)emory or (R)egisters",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
+      CASE c$ OF
+        WHEN "M":
+          INPUT"EXAMINE ADDRESS";p%:PRINT"ADDR ";FNo0(FNo2d(p%),5);" = ";FNo0(M%!((FNo2d(p%))<<2),4)
+        WHEN "R":
+          PRINT "PC:";FNo0(P%,4);" AC:";FNo0(A%,4);" MQ:";FNo0(Q%,4);" L:";L%;" DF:";D%>>12;" IF:";I%>>12
+          PRINT "EAE SC:";FNo0(eae_sc%,2);" GTF:";ABSeae_gtf%;" MODE:";:IFeae_mode%PRINT"B"ELSEPRINT"A"
+      ENDCASE
       ENDPROC
       :
       DEFPROCfile
@@ -254,16 +276,17 @@
       ENDPROC
 
       DEFPROCcore_image
-      LOCAL F$,count%,n%,l%,file%,word%
+      LOCAL F$,start%,count%,n%,l%,file%,word%
       INPUT"(L)oad/(S)ave",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
       CASE c$ OF
         WHEN "S":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME TO SAVE",F$
-          INPUT"NUMBER OF WORDS",count%
+          INPUT"START ADDRESS (OCTAL)",start%
+          INPUT"NUMBER OF WORDS (OCTAL)",count%
           file%=OPENOUT(@dir$+"/"+F$)
           IF file%<>0 THEN
-            FORn%=FALSETOcount%-1
+            FORn%=FNo2d(start%) TO FNo2d(count%)-1
               word%=FNexamine(n%)
               BPUT#file%,((word%AND&FC0)>>6)+33:BPUT#file%,(word%AND63)+33
               IF (n%MOD&40)=FALSE THEN BPUT#file%,10:REM Split into 64-character (32-word) lines
@@ -275,13 +298,14 @@
         WHEN "L":
           OSCLI"DIR "+@dir$:OSCLI". *.CORE"
           INPUT"IMAGE FILE NAME",F$
+          INPUT"START ADDRESS (OCTAL)",start%
           file%=OPENIN(@dir$+"/"+F$)
           IF file%<>0 THEN
-            address%=I%
+            IFTF%THENPROCtrace_file("Loading core image file"):address%=start%
             REPEAT
               byte1%=BGET#file%:IFbyte1%=10THENbyte1%=BGET#file%
               byte2%=BGET#file%
-              PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33))
+              PROCdeposit(address%,((byte1%-33)<<6) + (byte2%-33)):IFTF%THENPROCtrace_file("Load " + FNo0(address%,4) + " with " + FNo0(((byte1%-33)<<6) + (byte2%-33),4) )
               address%+=1
             UNTIL EOF#file%
             PRINT"LOADED "+F$+" IMAGE"
@@ -302,11 +326,14 @@
         WHEN "Q":
           INPUT"MQ";p%:Q%=FNo2d(p%)AND&FFF
         WHEN "M":
-          INPUT"LOCATION";p%:p%=FNo2d(p%)AND&7FFF
+          INPUT"START LOCATION";p%:p%=FNo2d(p%)AND&7FFF
           REPEAT
-            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
-          UNTIL VAL(LEFT$(STR$c%,1))>=FALSE AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=FALSE AND VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=FALSE AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=FALSE AND VAL(RIGHT$(STR$c%,1))<=7
-          M!(p%<<2)=c%
+            PRINT "CURRENT CONTENTS "FNo0(p%,5)" IS ";FNo0(M%!(p%<<2),4):INPUT "ENTER NEW OCTAL VALUE (0-7777) (-1 TO QUIT):"c%
+            IFFNo2d(c%)>=0ANDFNo2d(c%)<=4095THENM%!(p%<<2)=FNo2d(c%)
+            p%=(p%+1)AND&FFF
+          UNTILc%<0ORc%>7777
+          REM UNTIL NOT(VAL(LEFT$(STR$c%,1))>=FALSE AND VAL(LEFT$(STR$c%,1))<=7 AND VAL(MID$(STR$c%,2,1))>=FALSE AND
+          REM VAL(MID$(STR$c%,2,1))<=7 AND VAL(MID$(STR$c%,3,1))>=FALSE AND VAL(MID$(STR$c%,3,1))<=7 AND VAL(RIGHT$(STR$c%,1))>=FALSE AND VAL(RIGHT$(STR$c%,1))<=7)
         WHEN "S":
           REPEAT
             PRINT "CURRENT SR IS ";FNo0(sr%,4):INPUT "ENTER NEW OCTAL VALUE (0-7777):"c%
@@ -365,13 +392,15 @@
       REM Memory control
       I%=FALSE:D%=FALSE:insbuffer%=FALSE:intbuffer%=FALSE:icontrol%=TRUE
       REM TTY/TAPE flags/buffers
-      kint%=TRUE:kbdbuf$="":ttybuf$="":K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=FALSE
+      kint%=TRUE:kbdbuf$=CHR$(0):ttybuf$=CHR$(0):K%=FALSE:T%=TRUE:hstflag%=FALSE:hstbuffer%=FALSE
       REM RK8E
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
+      REM KE8-E Extended Arithmetic Element
+      eae_sc%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, mode (A=FALSE, B=TRUE), greater than flag
 
       REM Debugging options
-      S%=FALSE:TF%=FALSE:TS%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen
+      S%=FALSE:TF%=FALSE:TS%=FALSE:F%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen, HLT flag
 
       REM Set up the RIM and BIN loaders in memory
       RESTORE
@@ -389,7 +418,7 @@
 
       ENDPROC
 
-      DEFPROCtrace_file(t$):PRINT#trace%,t$:BPUT#trace%,10:ENDPROC
+      DEFPROCtrace_file(t$):PRINT#trace%,t$:BPUT#trace%,10:PTR#trace%=PTR#trace%:ENDPROC
 
       DEFPROCquit
       LOCALc$,c%
@@ -402,5 +431,7 @@
           QUIT
       ENDCASE
       ENDPROC
+
+
 
 
