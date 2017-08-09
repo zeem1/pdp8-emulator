@@ -2,7 +2,7 @@
       INSTALL @lib$+"/multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
-      REM INSTALL @dir$+"EAE.bbc"
+      INSTALL @dir$+"EAE.bbc"
       INSTALL @dir$+"RK8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
@@ -104,8 +104,8 @@
                 IF (C%AND&D0)=&80THENA%=FALSE:REM Bit 4 set and bit 7 clear, CLA
                 IF (C%AND&D0)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
                 IF (C%AND&D0)=&C0THENA%=Q%:REM Bits 4 and 5 set, CLA+MQA
-                IF (C%AND&D0)=&10THENPRINT"MQL ";A%,Q%:Q%=A%:A%=FALSE:PRINTA%,Q%:REM Bit 7 set, MQL
-                IF (C%AND&D0)=&50THENtemp%=Q%:Q%=A%:A%=temp%:REM Bits 5 and 7 set (MQA+MQL), SWP
+                IF (C%AND&D0)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
+                IF (C%AND&D0)=&50THENtemp%=Q%:Q%=A%:A%=temp%:PROCtrace_file("SWP instruction executed"):REM Bits 5 and 7 set (MQA+MQL), SWP
                 IF (C%AND&D0)=&90THENA%=FALSE:Q%=FALSE:REM Bits 4 and 7 set (CLA+MQL), CAM
                 PROCeae:REM Put here in case I add an option to disable the EAE
               ENDIF
@@ -397,7 +397,7 @@
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
       REM KE8-E Extended Arithmetic Element
-      eae_sc%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, instruction register, mode (A=FALSE, B=TRUE), greater than flag
+      eae_sc%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, mode (A=FALSE, B=TRUE), greater than flag
 
       REM Debugging options
       S%=FALSE:TF%=FALSE:TS%=FALSE:F%=FALSE:REM S%=single-step, TF%=trace to file, TS%=trace to screen, HLT flag
@@ -432,85 +432,6 @@
       ENDCASE
       ENDPROC
 
-      DEFPROCeae
-      LOCALtemp%,temp2%
-      REM Mode swap instructions, come first otherwise SCA/MQL bits conflict
-      IF (C%AND&3E)=&18THENeae_mode%=TRUE:ENDPROC:REM SWAB; MQL already executed by main Group 3 routine
-      IF (C%AND&3E)=&26THENeae_mode%=FALSE:eae_gtf%=FALSE:ENDPROC:REM SWBA
-      REM EAE instructions
-      IF eae_mode%=FALSE THEN
-        REM Mode A
-        IF (C%AND&20)=&20THENA%=A%OReae_sc%:REM bit 6 set, SCA
-        CASE (C%AND&E) OF
-          WHEN 2: P%=(P%-TRUE)AND&FFF:eae_sc%=NOT(FNexamine(I%+P%))AND&1F:REM SCL
-          WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(I%+P%))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:L%=FALSE:REM MUY
-          WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(I%+P%):L%=0:REM DVI
-            IFtemp2%>0THENQ%=temp%DIVtemp2%:A%=temp%MODtemp2%:IFA%>&FFFTHENL%=1:A%=&FFF:Q%=(Q%<<1)+1
-          ELSE
-            L%=1:A%=FALSE:Q%=1
-          ENDIF
-        WHEN 8: REM NMI
-          eae_sc%=FALSE:temp%=(A%<<12)+Q%:IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
-          REPEAT:L%=(temp%AND&800000)>>23:temp%=(temp%<<1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILtemp%=&C00000OR(((temp%AND&400000)<<1)<>(temp%AND&800000))
-          A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-        WHEN 10:
-          P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT FNexamine(I%+P%))AND&1F:REM SHL
-          REPEAT:temp%=temp%<<1:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
-          L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-        WHEN 12: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT FNexamine(I%+P%))AND&1F:REM ASR
-          REPEAT:temp2%=temp%AND&800000:temp%=temp%>>1:temp%=temp%+temp2%:L%=temp2%>>23:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
-          A%=((temp%AND&FFF000)>>12):Q%=temp%AND&FFF
-        WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=(NOT FNexamine(I%+P%))AND&1F:REM LSR
-          REPEAT:temp%=temp%>>1:eae_sc%=(eae_sc%+1)AND&1F:UNTILeae_sc%=0
-          L%=0:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-      ENDCASE
-      eae_gtf%=FALSE:REM GTF is cleared by all Mode A instructions
-      ELSE
-      REM Mode B
-      IF (C%AND&20)=&20THEN
-        CASE C%AND&E OF
-          WHEN 0: A%=A%OReae_sc%:REM SCA
-          WHEN 2: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=D%+FNexamine(I%+P%):REM DAD
-            temp%=temp%+(FNexamine(temp2%+1)<<12)+FNexamine(temp2%)
-            L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-          WHEN 4: P%=(P%-TRUE)AND&FFF:PROCdeposit(D%+FNexamine(I%+P%),Q%):PROCdeposit(D%+FNexamine(I%+P%)+1,A%):REM DST
-          WHEN 6: eae_mode%=FALSE:REM ????? P%=(P%-TRUE)AND&FFF::REM SWBA
-          WHEN 8: IFA%+Q%=FALSE THENP%=(P%-TRUE)AND&FFF:REM DPSZ
-          WHEN 10: REM DPIC
-            REM In this and DCM, MQA/MQL bits must be set (SWP), so swap back again before incrementing
-            temp%=(Q%<<12)+A%:temp%+=1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-          WHEN 12: temp%=(Q%<<12)+A%:temp%=((NOTtemp%)AND&FFFFFF)+1:L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM DCM
-          WHEN 14: eae_gtf%=FNtc12(Q%)>=FNtc12(A%):L%=-(A%<=Q%):A%=(FNtc12(Q%)-FNtc12(A%))AND&FFF:REM SAM
-        ENDCASE
-      ELSE
-        CASE C%AND&E OF
-          WHEN 2: eae_sc%=A%AND&1F:A%=FALSE:REM ACS
-          WHEN 4: P%=(P%-TRUE)AND&FFF:temp%=(Q%*FNexamine(D%+FNexamine(I%+P%)))+A%:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF:REM MUY
-          WHEN 6: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:temp2%=FNexamine(D%+FNexamine(I%+P%)):L%=0:REM DVI
-            IFtemp2%>0THENQ%=temp%DIVtemp2%:A%=temp%MODtemp2%:IFA%>&FFFTHENL%=1:A%=&FFF:Q%=((Q%<<1)+1)AND&FFF
-          ELSE
-            L%=1:A%=FALSE:Q%=1
-          ENDIF
-        WHEN 8: REM NMI
-          eae_sc%=FALSE:temp%=(A%<<12)+Q%
-          IF(temp%AND&7FFFFF)=0THENA%=FALSE:ENDPROC
-          IF(temp%AND&3FFFFF)=0THENENDPROC:REM Already normalised
-          REPEAT:L%=(temp%AND&800000)>>23:temp%=(temp%<<1)AND&FFFFFF:eae_sc%=(eae_sc%+1)AND&1F:UNTILtemp%=&C00000OR(((temp%AND&400000)<<1)<>(temp%AND&800000))
-          A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-        WHEN 10: P%=(P%-TRUE)AND&FFF:temp%=(L%<<24)+(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:REM SHL
-          WHILEeae_sc%>0:temp%=temp%<<1:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
-          L%=(temp%AND&1000000)>>24:A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-        WHEN 12: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:L%=-((A%AND&800)=&800):REM ASR
-          WHILEeae_sc%>0:eae_gtf%=-(temp%AND1):temp2%=temp%AND&800000:temp%=temp%>>1:temp%=temp%+temp2%:L%=temp2%>>23:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
-          A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-        WHEN 14: P%=(P%-TRUE)AND&FFF:temp%=(A%<<12)+Q%:eae_sc%=FNexamine(I%+P%)AND&1F:L%=FALSE:REM LSR
-          WHILEeae_sc%>0:eae_gtf%=-(temp%AND1):temp%=temp%>>1:eae_sc%-=1:ENDWHILE:eae_sc%=&1F
-          A%=(temp%AND&FFF000)>>12:Q%=temp%AND&FFF
-      ENDCASE
-      ENDIF
-      ENDIF
-      ENDPROC
 
-      DEFFNtc12(w%):=((((w%AND&800)=&800)*2048)+(w%AND&7FF))
 
 
