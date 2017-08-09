@@ -37,7 +37,7 @@
       REPEAT
         IF int% THEN IF NOT int_inhib% THEN IF FNirqline THEN IF icontrol% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>&9)+(D%>>&C):I%=FALSE:insbuffer%=FALSE:D%=FALSE:P%=&1
         IF int_inhib%<FALSE THEN int_inhib%-=TRUE
-        startpc%=P%:REM IFP%=1920THENTF%=TRUE
+        startpc%=P%
         PROCexecute
         IF TF% OR TS% THEN
           d$=FNstatus(startpc%)
