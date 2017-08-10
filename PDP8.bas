@@ -20,7 +20,7 @@
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
-      REM ******************************** ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
+      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
 
       DIM M% 131071
@@ -35,35 +35,31 @@
       :
       REM ** Main loop **
       REPEAT
-        IF int% THEN IF NOT int_inhib% THEN IF FNirqline THEN IF icontrol% THEN int%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>&9)+(D%>>&C):I%=FALSE:insbuffer%=FALSE:D%=FALSE:P%=&1
-        IF int_inhib%<FALSE THEN int_inhib%-=TRUE
-        startpc%=P%
-        PROCexecute
-        IF TF% OR TS% THEN
+        IFF%THENF%=FALSE:PROCcommand
+        IFint%THENIFNOTint_inhib%THENIF((K%ORT%)ANDkint%)THENIFicontrol%THENint%=FALSE:PROCdeposit(FALSE,P%):intbuffer%=(I%>>&9)+(D%>>&C):I%=FALSE:insbuffer%=FALSE:D%=FALSE:P%=&1
+        IFint_inhib%<FALSE THENint_inhib%-=TRUE
+        startpc%=P%:PROCexecute:IFTF%ORTS%THEN
           d$=FNstatus(startpc%)
-          IF TF% THEN PROCtrace_file(d$+"K%="+STR$K%+" T%="+STR$T%+" fnirqline="+STR$FNirqline)
+          IF TF% THEN PROCtrace_file(d$)
           IF TS% THEN PROC_selectwin(&1):PRINTd$:PROC_selectwin(0)
         ENDIF
-        IFINKEY(-114)ORF%THENF%=FALSE:PROCcommand
+        REM IFINKEY(-114)ORF%THENF%=FALSE:PROCcommand
         IF S% THEN PROCpause
       UNTIL FALSE
       :
       DEFFNaddr(eff_M%)
       IF (eff_M%AND&100)=FALSE THEN
-        =I%+(((eff_M% AND &80) >>&7)*(P% AND &F80) + (eff_M% AND &7F))
+        =I%+(((eff_M%AND&80)>>&7)*(P%AND&F80)+(eff_M%AND&7F))
       ELSE
-        temp%=((eff_M% AND &80) >>&7)*(P% AND &F80) + (eff_M% AND &7F)
-        IF temp%>&7 AND temp%<&10 THEN PROCdeposit(I%+temp%,(FNexamine(I%+temp%)-TRUE)AND&FFF)
+        temp%=((eff_M%AND&80)>>&7)*(P%AND&F80)+(eff_M% AND &7F)
+        IF temp%>&7 ANDtemp%<&10THENPROCdeposit(I%+temp%,(FNexamine(I%+temp%)-TRUE)AND&FFF)
         =D%+FNexamine(I%+temp%)
       ENDIF
-      DEFPROCdeposit(address%,word%):IFTF%THENPROCtrace_file("Deposit addr "+FNo0(address%,4)+" with "+FNo0(word%,4))
-      M%!(address%<<&2)=word% ENDPROC
-      DEFFNexamine(address%):IFTF%THENPROCtrace_file("Examine addr "+FNo0(address%,4)+", contents "+FNo0(M%!(address%<<&2),4))
-      =M%!(address%<<&2)
-      DEFFNirqline =(K% OR T%) AND kint%
+      DEFPROCdeposit(address%,word%):M%!(address%<<&2)=word%:ENDPROC:REM IFTF%THENPROCtrace_file("Deposit addr "+FNo0(address%,4)+" with "+FNo0(word%,4))
+      DEFFNexamine(address%):=M%!(address%<<&2):REM IFTF%THENPROCtrace_file("Examine addr "+FNo0(address%,4)+", contents "+FNo0(M%!(address%<<&2),4))
       DEFPROCexecute
-      C%=FNexamine(I%+P%):CASE C% AND &E00 OF
-        WHEN FALSE: A%=A% AND FNexamine(FNaddr(C%)):P%=(P%-TRUE)AND&FFF:REM AND - and operand with AC
+      C%=FNexamine(I%+P%):CASEC%AND&E00OF
+        WHEN FALSE:A%=A%ANDFNexamine(FNaddr(C%)):P%=(P%-TRUE)AND&FFF:REM AND - and operand with AC
         WHEN &200:A%=A%+FNexamine(FNaddr(C%)):P%=(P%-TRUE)AND&FFF:IF A%>&FFF THEN A%=A%-&1000:L%=(NOT L%)AND&1:REM TAD - add operand to (a 13 bit value)
         WHEN &400:addr%=FNaddr(C%):temp%=(FNexamine(addr%)-TRUE)AND&FFF:PROCdeposit(addr%,temp%):P%=(P%-TRUE)AND&FFF:IFtemp%=FALSE THENP%=(P%-TRUE)AND&FFF:REM ISZ - increment operand and skip if result is zero
         WHEN &600:PROCdeposit(FNaddr(C%),A%):A%=FALSE:P%=(P%-TRUE)AND&FFF:REM DCA - deposit AC in memory and clear AC
@@ -71,7 +67,7 @@
         WHEN &A00:icontrol%=TRUE:P%=FNaddr(C%)AND&FFF:I%=insbuffer%:REM JMP - jump
         WHEN &C00:PROCiot:REM IOT - input/output transfer
         WHEN &E00:  REM OPR - microcoded operations
-          CASE (C% AND &F00) OF
+          CASE (C%AND&F00) OF
             WHEN &E00:REM Group 1 (%1110xxxxxxxx)
               IF (C%AND&80)=&80 THEN A%=FALSE:REM CLA
               IF (C%AND&40)=&40 THEN L%=FALSE  :REM CLL
@@ -101,12 +97,13 @@
               ELSE
                 REM Group 3 (%1111xxxxxxx1); MQ/EAE instructions
                 REM Standard MQ instructions
-                IF (C%AND&D0)=&80THENA%=FALSE:REM Bit 4 set and bit 7 clear, CLA
-                IF (C%AND&D0)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
-                IF (C%AND&D0)=&C0THENA%=Q%:REM Bits 4 and 5 set, CLA+MQA
-                IF (C%AND&D0)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
-                IF (C%AND&D0)=&50THENtemp%=Q%:Q%=A%:A%=temp%:PROCtrace_file("SWP instruction executed"):REM Bits 5 and 7 set (MQA+MQL), SWP
-                IF (C%AND&D0)=&90THENA%=FALSE:Q%=FALSE:REM Bits 4 and 7 set (CLA+MQL), CAM
+                IF (C%AND&80)=&80THENA%=FALSE:REM Bit 4 set, CLA
+                IF (C%AND&50)=&50THEN
+                  temp%=Q%:Q%=A%:A%=temp%:REM Bits 5 and 7 set (MQA+MQL), SWP
+                ELSE
+                  IF (C%AND&40)=&40THENA%=A%ORQ%:REM Bit 5 set, MQA
+                  IF (C%AND&10)=&10THENQ%=A%:A%=FALSE:REM Bit 7 set, MQL
+                ENDIF
                 PROCeae:REM Put here in case I add an option to disable the EAE
               ENDIF
           ENDCASE
@@ -116,6 +113,7 @@
       :
       DEFPROCkbd
       LOCAL kbdtemp$
+      IFINKEY(-114)THENF%=TRUE
       kbdtemp$=INKEY$(0):IFkbdtemp$<>""THEN
         IFASCkbdtemp$>96THENkbdtemp$=CHR$(ASC(kbdtemp$)AND&DF)
         kbdbuf$=kbdtemp$:K%=TRUE
@@ -131,7 +129,7 @@
           WHEN &9: pos%=((POS+8)DIV8*8)
             temp$="":FORN=1TOpos%-POS:temp$=temp$+" ":NEXT:PRINTtemp$;
             PRINT#screen%,temp$:REM Expand tabs to 8 chars
-          WHEN &7: PROCbell(200)
+          WHEN &7: PRINT'"TTY BELL AT ";TIME$':PROCbell(200)
           WHEN FALSE: REM suppress output of ASCII 0 to text output file
           OTHERWISE: VDUtemp%:BPUT#screen%,temp%
         ENDCASE
@@ -154,7 +152,7 @@
       ENDPROC
       :
       DEFPROCcommand
-      LOCALc$,p%:PRINTFNstatus(P%)
+      LOCALc$,p%:PROC_selectwin(0):PRINTFNstatus(P%)
       PRINT "Stopped. ";
       REPEAT
         OSCLI"FX15,1":INPUT"COMMAND:"'"(C)ont/(E)xamine/(D)eposit/(F)ile/De(b)ug/(Q)uit",c$:c$=LEFT$(CHR$(ASCc$AND223),1)
