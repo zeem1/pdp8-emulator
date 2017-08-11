@@ -4,6 +4,7 @@
       INSTALL @dir$+"IOT.bbc"
       INSTALL @dir$+"EAE.bbc"
       INSTALL @dir$+"RK8E.bbc"
+      INSTALL @dir$+"RX8E.bbc"
 
       VDU 23,22,800;524;10,21,2,8:REM Window and font sizes
 
@@ -19,6 +20,7 @@
 
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
+      rx_file0%=FALSE:rx_file1%=FALSE
       :
       ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
@@ -27,6 +29,8 @@
       OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
 
       PROCinit
+
+      rx_file0%=OPENIN(@dir$+"os8_rx.rx01"):rxro0%=TRUE:REM *********** FOR TESTING
 
       PRINT "PDP-8/e Emulator"
       PRINT "================"
@@ -394,6 +398,10 @@
       REM RK8E
       rk_ca%=FALSE:rk_com%=FALSE:rk_da%=FALSE:rk_st%=FALSE:REM Curr addr, command, disk addr, status registers
       rkro0%=FALSE:rkro1%=FALSE:rkro2%=FALSE:rkro3%=FALSE:REM Read-only status for each drive
+      REM RX8E
+      rx_com%=FALSE:rx_intreg%=FALSE:rx_trkaddr%=FALSE:rx_secaddr%=FALSE:rx_errstat%=FALSE:rx_errcode%=FALSE:rx_trrqf%=FALSE:rx_errf%=FALSE:rx_donef%=FALSE:rx_inten%=FALSE:DIMrx_buf% 128
+      rxro0%=FALSE:rxro1%=FALSE
+
       REM KE8-E Extended Arithmetic Element
       eae_sc%=FALSE:eae_mode%=FALSE:eae_gtf%=FALSE:REM Step counter, mode (A=FALSE, B=TRUE), greater than flag
 
