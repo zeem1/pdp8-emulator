@@ -1,5 +1,6 @@
-      INSTALL @dir$+"/Number.bbc"
-      INSTALL @lib$+"/multiwin.bbc"
+
+      INSTALL @dir$+"Number.bbc"
+      INSTALL @lib$+"multiwin.bbc"
       INSTALL @dir$+"status.bbc"
       INSTALL @dir$+"IOT.bbc"
       INSTALL @dir$+"EAE.bbc"
@@ -11,17 +12,17 @@
       COLOUR&80:COLOUR1:CLS
 
       PROC_multiwin(1):REM Multiple window support, 1 window
-      HWND%=FN_createwin(1,"Debug window",100,100,640,512,0,0,0)
+      HWND%%=FN_createwin(1,"Debug window",100,100,320,256,0,0,0)
       PROC_selectwin(1):VDU 23,22,640;256;8,16,2,8:REM Window size
-      REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 12"
+      REM REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 12"
       PROC_selectwin(0):VDU 19,1,2,0,0,0:REM Set foreground colour to green
       OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
 
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
-      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
       ON CLOSE PROC_closewin(1):CLOSE#0:QUIT
+      ON ERROR PROC_closewin(1):REPORT:CLOSE#0:END
 
       DIM M% 131071
       OSCLI"TIMER 20":ON TIME PROCkbd:RETURN
@@ -429,7 +430,6 @@
           QUIT
       ENDCASE
       ENDPROC
-
 
 
 
