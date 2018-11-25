@@ -10,13 +10,6 @@
       OSCLI"ESC OFF":REM ASCII 27 needed in emulator
       COLOUR&80:COLOUR1:CLS
 
-      PROC_multiwin(1):REM Multiple window support, 1 window
-      HWND%=FN_createwin(1,"Debug window",100,100,640,512,0,0,0)
-      PROC_selectwin(1):VDU 23,22,640;256;8,16,2,8:REM Window size
-      REM OSCLI "FONT """ + @lib$ + "DejaVuSansMono"", 12"
-      PROC_selectwin(0):VDU 19,1,2,0,0,0:REM Set foreground colour to green
-      OSCLI "FONT """ + @dir$ + "Glass_TTY_VT220.ttf"", 15"
-
       CLOSE#0:trace%=OPENOUT(@dir$+"/trace.log"):screen%=OPENOUT(@dir$+"/screen.txt")
       file%=FALSE:rk_file0%=FALSE:rk_file1%=FALSE:rk_file2%=FALSE:rk_file3%=FALSE:REM Prevents failure when no tape or disk image opened
       :
